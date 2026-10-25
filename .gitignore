@@ -1,0 +1,28 @@
+# Flutter and Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Android and Gradle
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.jks
+*.keystore
+
+# IDE and generated artifacts
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Test and review evidence
+coverage/
+test-results/
+
+# Operating system
+.DS_Store
+Thumbs.db
