@@ -13,7 +13,11 @@ import 'theme.dart';
 import 'widgets/shared.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.startupWarning});
+
+  /// Pesan sekali tampil bila lapisan data gagal disiapkan.
+  final String? startupWarning;
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -31,6 +35,12 @@ class _AppShellState extends State<AppShell> {
       VideosScreen(onOpenPlayer: openPlayer),
       const SettingsScreen(),
     ];
+    final warning = widget.startupWarning;
+    if (warning != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showAppMessage(context, warning);
+      });
+    }
   }
 
   void openPlayer() {

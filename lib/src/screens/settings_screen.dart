@@ -79,7 +79,9 @@ class SettingsScreen extends StatelessWidget {
                 tooltip: 'Baca status preferensi',
                 onPressed: () => showAppMessage(
                   context,
-                  'Pengaturan playback masih sesi preview. Belum ada preferensi persisten atau autoplay.',
+                  'Aksen, Reduce Motion, mode repeat, dan shuffle tersimpan di '
+                  'perangkat dan dipulihkan saat aplikasi dibuka kembali. '
+                  'Antrean dan playlist preview masih sementara.',
                 ),
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
@@ -175,8 +177,8 @@ class SettingsScreen extends StatelessWidget {
         content: SingleChildScrollView(
           child: Text(
             privacy
-                ? 'Fungsi inti dirancang untuk bekerja secara lokal. Tahap frontend ini tidak mengimpor, membaca, atau mengunggah media perangkat. Tidak ada akun maupun telemetri. Penghapusan item dari library tidak boleh menghapus file asli.'
-                : 'Pemutar musik dan video lokal offline-first.\n\nVersi 0.1.0 merupakan preview frontend. Backend lokal/media service, file picker, playback, database, dan persistensi belum diimplementasikan.\n\nArtwork dan ilustrasi digambar secara lokal oleh kode aplikasi. Font Manrope digunakan berdasarkan SIL Open Font License; salinan lisensi disertakan dalam proyek. Tidak ada aset Storyset yang digunakan pada tahap ini.',
+                ? 'Fungsi inti dirancang untuk bekerja secara lokal. Tahap ini tidak mengimpor, membaca, atau mengunggah media perangkat. Tidak ada akun maupun telemetri. Penghapusan item dari library tidak boleh menghapus file asli.'
+                : 'Pemutar musik dan video lokal offline-first.\n\nVersi 0.1.0 merupakan preview antarmuka dengan lapisan data lokal: database SQLite, repository media/playlist/antrean, dan preferensi yang bertahan setelah aplikasi dibuka kembali. File picker, pemutaran media, dan persistensi antrean/playlist belum diimplementasikan.\n\nArtwork dan ilustrasi digambar secara lokal oleh kode aplikasi. Font Manrope digunakan berdasarkan SIL Open Font License; salinan lisensi disertakan dalam proyek. Tidak ada aset Storyset yang digunakan pada tahap ini.',
           ),
         ),
         actions: [

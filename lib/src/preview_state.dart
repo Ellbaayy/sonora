@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'data/repositories.dart';
+
 enum MediaKind { audio, video }
 
 enum ArtworkStyle { waves, orbital, bloom, midnight, cinema, cassette }
@@ -129,6 +131,11 @@ const sampleVideos = <MediaItem>[
 ];
 
 class PreviewState extends ChangeNotifier {
+  PreviewState({this.settings});
+
+  /// Penyimpanan preferensi lokal; `null` berarti mode tanpa persistensi.
+  final SettingsRepository? settings;
+
   int _tab = 0;
   String? _selectedId = 'song-1';
   bool _isPlaying = false;
@@ -355,12 +362,16 @@ class PreviewState extends ChangeNotifier {
     _shuffle = !_shuffle;
     _shuffleOrder = _shuffle ? _buildShuffleOrder() : null;
     notifyListeners();
+    _persist((settings) => settings.writeBool(SettingsKeys.shuffle, _shuffle));
   }
 
   void cycleRepeat() {
     _repeat =
         PreviewRepeat.values[(_repeat.index + 1) % PreviewRepeat.values.length];
     notifyListeners();
+    _persist(
+      (settings) => settings.write(SettingsKeys.repeatMode, _repeat.name),
+    );
   }
 
   void toggleFavorite(String id) {
@@ -371,11 +382,47 @@ class PreviewState extends ChangeNotifier {
   void setReduceMotion(bool value) {
     _reduceMotion = value;
     notifyListeners();
+    _persist(
+      (settings) => settings.writeBool(SettingsKeys.reduceMotion, value),
+    );
   }
 
   void setAccent(bool cyan) {
     _cyanAccent = cyan;
     notifyListeners();
+    _persist((settings) => settings.writeBool(SettingsKeys.cyanAccent, cyan));
+  }
+
+  /// Memulihkan preferensi yang tersimpan agar bertahan setelah aplikasi
+  /// ditutup dan dibuka kembali (PRD bagian 6.7).
+  Future<void> restorePreferences() async {
+    final settings = this.settings;
+    if (settings == null) return;
+    try {
+      final cyan = await settings.readBool(SettingsKeys.cyanAccent);
+      final reduceMotion = await settings.readBool(SettingsKeys.reduceMotion);
+      final shuffle = await settings.readBool(SettingsKeys.shuffle);
+      final repeat = await settings.read(SettingsKeys.repeatMode);
+      _cyanAccent = cyan;
+      _reduceMotion = reduceMotion;
+      _shuffle = shuffle;
+      _shuffleOrder = shuffle ? _buildShuffleOrder() : null;
+      _repeat = PreviewRepeat.values.firstWhere(
+        (value) => value.name == repeat,
+        orElse: () => PreviewRepeat.off,
+      );
+      notifyListeners();
+    } catch (error) {
+      debugPrint('SONORA: preferensi tersimpan tidak dapat dibaca ($error)');
+    }
+  }
+
+  void _persist(Future<void> Function(SettingsRepository settings) operation) {
+    final settings = this.settings;
+    if (settings == null) return;
+    operation(settings).catchError((Object error) {
+      debugPrint('SONORA: preferensi gagal disimpan ($error)');
+    });
   }
 
   void setSort(String value) {

@@ -98,5 +98,8 @@ Semua komponen memakai token berikut. Proporsi sasaran 60% latar gelap, 30% perm
 - Status selected/playing menggabungkan ikon dan teks/tooltip, bukan warna saja. Teks utama/surface memenuhi target 4.5:1; hasil pengukuran final perlu diverifikasi pada implementasi.
 - Search tetap dapat digunakan dengan keyboard; urutan fokus mengikuti urutan visual; aksi destruktif perlu konfirmasi.
 - Konten dapat discroll pada text scaling; QA minimum pada 1.0 dan 1.3.
-- Hutang yang diterima secara eksplisit: fase frontend belum mempunyai import native, playback MP3/MP4, database, queue persisten, video rendering, izin, atau media notification. Seluruh aksi tersebut harus memiliki penjelasan status, bukan sukses palsu.
+- Hutang yang diterima secara eksplisit: database SQLite sudah tersedia dan menyimpan preferensi,
+  tetapi import native, playback MP3/MP4, persistensi antrean/playlist ke database, video rendering,
+  izin, dan media notification belum diimplementasikan. Seluruh aksi tersebut harus memiliki
+  penjelasan status, bukan sukses palsu.
 - Pengujian TalkBack, perangkat fisik, performa animasi pada perangkat lambat, dan distribusi release bukan bukti yang tersedia dari tahap ini.
