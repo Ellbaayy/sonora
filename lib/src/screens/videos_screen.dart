@@ -182,6 +182,24 @@ Future<void> openVideoPlayer(BuildContext context, MediaItem video) async {
   );
 }
 
+/// Posisi awal saat tombol putar pada pemutar video ditekan.
+///
+/// Bila video sudah sampai di ujung, pemutaran dimulai lagi dari awal; bila
+/// belum, pemutaran berlanjut dari posisi terakhir. Pemeriksaan memakai
+/// toleransi karena posisi akhir kadang tercatat beberapa milidetik sebelum
+/// durasi sebenarnya, dan `play()` tidak berefek ketika pemutar sudah selesai.
+/// Dipisah sebagai fungsi murni agar perilakunya dapat diuji tanpa lapisan
+/// platform video.
+Duration videoResumePosition({
+  required Duration position,
+  required Duration duration,
+}) {
+  if (duration <= Duration.zero) return Duration.zero;
+  const toleransi = Duration(milliseconds: 400);
+  final sudahSelesai = position >= duration - toleransi;
+  return sudahSelesai ? Duration.zero : position;
+}
+
 class VideoPlayerScreen extends StatefulWidget {
   const VideoPlayerScreen({super.key, required this.video});
   final MediaItem video;
@@ -325,9 +343,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                     ? 'Jeda video'
                                     : 'Putar video',
                                 onPressed: () {
-                                  player.value.isPlaying
-                                      ? player.pause()
-                                      : player.play();
+                                  if (player.value.isPlaying) {
+                                    player.pause();
+                                  } else {
+                                    final resume = videoResumePosition(
+                                      position: player.value.position,
+                                      duration: player.value.duration,
+                                    );
+                                    if (resume != player.value.position) {
+                                      player.seekTo(resume);
+                                    }
+                                    player.play();
+                                  }
                                   setState(() {});
                                 },
                                 icon: Icon(
