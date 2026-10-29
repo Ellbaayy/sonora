@@ -52,6 +52,8 @@ Batas yang masih berlaku (jujur, bukan bug):
   posisinya, item baru masuk di belakang, dan tidak ada item yang hilang.
 - **Pemulihan posisi** tidak memutar otomatis. Aplikasi membuka trek terakhir dalam keadaan
   dijeda agar tidak mengejutkan pengguna.
+- **Tombol putar video** memeriksa posisi lebih dulu: bila video sudah berada di ujung,
+  pemutaran dimulai lagi dari awal; bila belum, pemutaran berlanjut dari posisi terakhir.
 - **Izin**: aplikasi hanya meminta izin notifikasi (Android 13+) saat pemutaran pertama.
   Akses berkas memakai pemilih sistem sehingga tidak meminta izin seluruh penyimpanan.
 
@@ -128,7 +130,7 @@ dan `POST_NOTIFICATIONS` untuk pemutaran background, serta service
 
 ## Pengujian
 
-`flutter test` menjalankan 42 pengujian:
+`flutter test` menjalankan 46 pengujian:
 
 - `test/data_repository_test.dart` — constraint, duplikat, transaksi, dan urutan posisi.
 - `test/app_state_test.dart` — antrean/repeat/shuffle, riwayat, impor, hapus media,
@@ -136,6 +138,9 @@ dan `POST_NOTIFICATIONS` untuk pemutaran background, serta service
 - `test/preferences_test.dart` — pemulihan preferensi dan fallback.
 - `test/screens_test.dart` — lima layar, Now Playing, antrean, playlist, dynamic island,
   pencarian, serta anti-overflow pada lebar 360 dan skala teks 1.3.
+- `test/video_player_test.dart` — posisi mulai pemutaran video: melanjutkan dari posisi
+  terakhir, kembali ke awal bila sudah di ujung (termasuk toleransi beberapa milidetik),
+  dan aman saat durasi belum diketahui.
 - `test/widget_test.dart` — smoke test aplikasi penuh.
 
 Widget test memakai `FakeAudioEngine` dan database di memori, sehingga tidak membutuhkan
