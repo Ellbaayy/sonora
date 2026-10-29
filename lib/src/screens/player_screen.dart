@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
+import '../app_state.dart';
 import '../artwork.dart';
-import '../preview_state.dart';
+import '../media/media_item.dart';
+import '../playback/notification_permission.dart';
 import '../theme.dart';
 import '../widgets/shared.dart';
-import 'playlists_screen.dart';
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     final item = state.selected;
     if (item == null) {
       return Scaffold(
@@ -21,9 +22,9 @@ class PlayerScreen extends StatelessWidget {
     }
     final favorite = state.favorites.contains(item.id);
     final repeatLabel = switch (state.repeat) {
-      PreviewRepeat.off => 'Ulangi: mati',
-      PreviewRepeat.one => 'Ulangi: satu lagu',
-      PreviewRepeat.all => 'Ulangi: semua',
+      SonoraRepeat.off => 'Ulangi: mati',
+      SonoraRepeat.one => 'Ulangi: satu lagu',
+      SonoraRepeat.all => 'Ulangi: semua',
     };
     return Scaffold(
       body: SafeArea(
@@ -44,30 +45,21 @@ class PlayerScreen extends StatelessWidget {
                           icon: const Icon(Icons.keyboard_arrow_down_rounded),
                         ),
                         Expanded(
-                          child: Column(
-                            children: [
-                              Text(
-                                'NOW PLAYING',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      letterSpacing: 1.7,
-                                      color: SonoraColors.muted,
-                                    ),
-                              ),
-                              Text(
-                                'Preview pemutar',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
+                          child: Text(
+                            'NOW PLAYING',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  letterSpacing: 1.7,
+                                  color: SonoraColors.muted,
+                                ),
                           ),
                         ),
                         IconButton(
                           tooltip: 'Buka antrean',
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => PreviewScope(
+                              builder: (_) => SonoraScope(
                                 state: state,
                                 child: const QueueScreen(),
                               ),
@@ -92,8 +84,8 @@ class PlayerScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: MediaArtwork(
-                          style: item.style,
+                        child: MediaArtwork.forItem(
+                          item,
                           dimension: (constraints.maxWidth - 72).clamp(
                             220.0,
                             340.0,
@@ -121,6 +113,8 @@ class PlayerScreen extends StatelessWidget {
                               const SizedBox(height: 6),
                               Text(
                                 item.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodyLarge
                                     ?.copyWith(color: SonoraColors.muted),
                               ),
@@ -144,33 +138,7 @@ class PlayerScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const PreviewNotice(compact: true),
-                    const SizedBox(height: 12),
-                    Semantics(
-                      label: 'Posisi simulasi, bukan posisi audio asli',
-                      slider: true,
-                      child: Slider(
-                        value: state.position.clamp(
-                          0,
-                          item.duration.toDouble(),
-                        ),
-                        max: item.duration.toDouble(),
-                        onChanged: state.seek,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          formatDuration(state.position),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const Spacer(),
-                        Text(
-                          formatDuration(item.duration),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+                    _SeekBar(item: item),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -196,11 +164,7 @@ class PlayerScreen extends StatelessWidget {
                           width: 68,
                           height: 68,
                           child: IconButton.filled(
-                            tooltip: state.previewMode
-                                ? 'Tentang simulasi pemutaran'
-                                : state.isPlaying
-                                ? 'Jeda simulasi'
-                                : 'Putar simulasi',
+                            tooltip: state.isPlaying ? 'Jeda' : 'Putar',
                             style: IconButton.styleFrom(
                               minimumSize: const Size(68, 68),
                               maximumSize: const Size(68, 68),
@@ -208,21 +172,14 @@ class PlayerScreen extends StatelessWidget {
                               backgroundColor: SonoraColors.primary,
                               foregroundColor: const Color(0xFF171024),
                             ),
-                            onPressed: () {
-                              if (state.previewMode) {
-                                showAppMessage(
-                                  context,
-                                  'Simulasi UI aktif: tidak ada audio yang diputar. Backend media belum tersedia.',
-                                );
-                              } else {
-                                showAppMessage(
-                                  context,
-                                  'Playback asli belum tersedia pada tahap frontend.',
-                                );
-                              }
+                            onPressed: () async {
+                              await ensureNotificationPermission();
+                              await state.togglePlay();
                             },
-                            icon: const Icon(
-                              Icons.play_arrow_rounded,
+                            icon: Icon(
+                              state.isPlaying
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
                               size: 38,
                             ),
                           ),
@@ -235,13 +192,13 @@ class PlayerScreen extends StatelessWidget {
                         ),
                         IconButton(
                           tooltip: repeatLabel,
-                          isSelected: state.repeat != PreviewRepeat.off,
+                          isSelected: state.repeat != SonoraRepeat.off,
                           onPressed: state.cycleRepeat,
                           icon: Icon(
-                            state.repeat == PreviewRepeat.one
+                            state.repeat == SonoraRepeat.one
                                 ? Icons.repeat_one_rounded
                                 : Icons.repeat_rounded,
-                            color: state.repeat == PreviewRepeat.off
+                            color: state.repeat == SonoraRepeat.off
                                 ? SonoraColors.muted
                                 : SonoraColors.primary,
                           ),
@@ -252,7 +209,9 @@ class PlayerScreen extends StatelessWidget {
                     Row(
                       children: [
                         IconButton(
-                          tooltip: 'Volume simulasi',
+                          tooltip: state.volume == 0
+                              ? 'Nyalakan suara'
+                              : 'Bisukan',
                           onPressed: () =>
                               state.setVolume(state.volume == 0 ? .72 : 0),
                           icon: Icon(
@@ -263,18 +222,15 @@ class PlayerScreen extends StatelessWidget {
                           ),
                         ),
                         Expanded(
-                          child: Semantics(
-                            label:
-                                'Volume simulasi, belum mengontrol perangkat',
-                            slider: true,
-                            child: Slider(
-                              value: state.volume,
-                              onChanged: state.setVolume,
-                            ),
+                          child: Slider(
+                            value: state.volume,
+                            onChanged: state.setVolume,
+                            semanticFormatterCallback: (value) =>
+                                'Volume ${(value * 100).round()} persen',
                           ),
                         ),
                         IconButton(
-                          tooltip: 'Volume penuh pada simulasi',
+                          tooltip: 'Volume penuh',
                           onPressed: () => state.setVolume(1),
                           icon: const Icon(
                             Icons.volume_up_outlined,
@@ -288,13 +244,7 @@ class PlayerScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () {
-                              state.enqueue(item.id);
-                              showAppMessage(
-                                context,
-                                'Ditambahkan ke antrean preview.',
-                              );
-                            },
+                            onPressed: () => state.enqueue(item.id),
                             icon: const Icon(Icons.add_to_queue_outlined),
                             label: const Text('Antrean'),
                           ),
@@ -309,12 +259,16 @@ class PlayerScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Kontrol seek dan volume hanya mengubah nilai preview.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                    if (!item.available) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Berkas media ini tidak ditemukan. Impor ulang atau '
+                        'hapus dari library.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: SonoraColors.warning),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -326,11 +280,71 @@ class PlayerScreen extends StatelessWidget {
   }
 }
 
+/// Seek bar yang mengikuti posisi pemutar tanpa membangun ulang seluruh layar.
+class _SeekBar extends StatefulWidget {
+  const _SeekBar({required this.item});
+  final MediaItem item;
+
+  @override
+  State<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends State<_SeekBar> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = SonoraScope.of(context);
+    return ValueListenableBuilder<Duration>(
+      valueListenable: state.positionNotifier,
+      builder: (context, position, _) {
+        final total = state.duration ?? widget.item.durationValue;
+        final max = total.inMilliseconds.toDouble();
+        final value = (_dragValue ?? position.inMilliseconds.toDouble()).clamp(
+          0.0,
+          max <= 0 ? 1.0 : max,
+        );
+        return Column(
+          children: [
+            Slider(
+              value: max <= 0 ? 0 : value,
+              max: max <= 0 ? 1 : max,
+              onChanged: max <= 0
+                  ? null
+                  : (next) => setState(() => _dragValue = next),
+              onChangeEnd: max <= 0
+                  ? null
+                  : (next) async {
+                      setState(() => _dragValue = null);
+                      await state.seek(Duration(milliseconds: next.round()));
+                    },
+              semanticFormatterCallback: (next) => formatDuration(next ~/ 1000),
+            ),
+            Row(
+              children: [
+                Text(
+                  formatDuration(value ~/ 1000),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const Spacer(),
+                Text(
+                  formatDuration(total.inSeconds),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class QueueScreen extends StatelessWidget {
   const QueueScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     final queue = state.queue;
     return Scaffold(
       appBar: AppBar(
@@ -347,10 +361,6 @@ class QueueScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: PreviewNotice(compact: true),
-            ),
             if (state.selected != null) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
@@ -367,7 +377,7 @@ class QueueScreen extends StatelessWidget {
                 child: MediaListTile(
                   item: state.selected!,
                   onTap: () {},
-                  trailing: const Equalizer(animate: false),
+                  trailing: Equalizer(animate: state.isPlaying),
                 ),
               ),
               const Padding(
@@ -395,7 +405,8 @@ class QueueScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Tambahkan lagu melalui menu di Library atau Now Playing.',
+                              'Tambahkan lagu melalui menu di Library atau '
+                              'Now Playing. Antrean tersimpan di perangkat.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: SonoraColors.muted),
@@ -415,7 +426,7 @@ class QueueScreen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: MediaListTile(
                             item: song,
-                            onTap: () => state.select(song),
+                            onTap: () => state.playItem(song),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -449,13 +460,14 @@ class QueueScreen extends StatelessWidget {
   }
 
   void _confirmClear(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Kosongkan antrean?'),
         content: const Text(
-          'Semua lagu berikutnya akan dihapus dari antrean preview. Media tidak dihapus.',
+          'Semua lagu berikutnya akan dihapus dari antrean. Media di library '
+          'tidak dihapus.',
         ),
         actions: [
           TextButton(

@@ -1,82 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
+import '../app_state.dart';
 import '../artwork.dart';
-import '../preview_state.dart';
+import '../data/models.dart';
+import '../media/media_item.dart';
 import '../theme.dart';
-
-class PreviewNotice extends StatelessWidget {
-  const PreviewNotice({super.key, this.compact = false});
-  final bool compact;
-  @override
-  Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
-    if (!state.previewMode) return const SizedBox.shrink();
-    return Semantics(
-      label: 'Informasi status pratinjau',
-      child: Container(
-        padding: EdgeInsets.all(compact ? 12 : 16),
-        decoration: BoxDecoration(
-          color: SonoraColors.warning.withValues(alpha: .065),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: SonoraColors.warning.withValues(alpha: .25),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Icon(
-                Icons.info_outline_rounded,
-                color: SonoraColors.warning,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pratinjau antarmuka',
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: SonoraColors.warning),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Media dan perubahan hanya contoh, belum dibaca atau disimpan dari perangkat.',
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: SonoraColors.muted),
-                  ),
-                ],
-              ),
-            ),
-            if (!compact) ...[
-              const SizedBox(width: 8),
-              Tooltip(
-                message: 'Lihat tampilan koleksi kosong',
-                child: InkWell(
-                  onTap: state.showEmptyLibrary,
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.visibility_outlined,
-                      color: SonoraColors.warning,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class SectionHeading extends StatelessWidget {
   const SectionHeading(this.title, {super.key, this.action, this.onAction});
@@ -151,8 +79,11 @@ class MediaListTile extends StatelessWidget {
   final Widget? trailing;
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     final isSelected = state.selected?.id == item.id;
+    final subtitle = item.available
+        ? '${item.artist}  •  ${formatDuration(item.duration)}'
+        : 'Berkas tidak ditemukan  •  impor ulang atau hapus';
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
@@ -162,7 +93,7 @@ class MediaListTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              MediaArtwork(style: item.style, dimension: 56, radius: 12),
+              MediaArtwork.forItem(item, dimension: 56, radius: 12),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -185,19 +116,32 @@ class MediaListTile extends StatelessWidget {
                     Row(
                       children: [
                         if (isSelected) ...[
-                          Icon(
+                          const Icon(
                             Icons.graphic_eq_rounded,
                             size: 14,
                             color: SonoraColors.accent,
                           ),
                           const SizedBox(width: 4),
                         ],
+                        if (!item.available) ...[
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 14,
+                            color: SonoraColors.warning,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
                         Flexible(
                           child: Text(
-                            '${item.artist}  •  ${formatDuration(item.duration)}',
+                            subtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: item.available
+                                      ? SonoraColors.muted
+                                      : SonoraColors.warning,
+                                ),
                           ),
                         ),
                       ],
@@ -240,7 +184,7 @@ class HorizontalMediaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            MediaArtwork(style: item.style, dimension: width, radius: 16),
+            MediaArtwork.forItem(item, dimension: width, radius: 16),
             const SizedBox(height: 12),
             Text(
               item.title,
@@ -262,84 +206,10 @@ class HorizontalMediaCard extends StatelessWidget {
   }
 }
 
-class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key, required this.onOpen});
-  final VoidCallback onOpen;
-  @override
-  Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
-    final item = state.selected;
-    if (item == null || item.kind != MediaKind.audio) {
-      return const SizedBox.shrink();
-    }
-    return Material(
-      color: SonoraColors.raised,
-      child: InkWell(
-        onTap: onOpen,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 72),
-          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-          decoration: const BoxDecoration(
-            border: Border(
-              top: BorderSide(color: SonoraColors.border),
-              bottom: BorderSide(color: SonoraColors.border),
-            ),
-          ),
-          child: Row(
-            children: [
-              MediaArtwork(style: item.style, dimension: 46, radius: 10),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Dipilih • belum memutar audio',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: state.isPlaying ? 'Jeda simulasi' : 'Putar simulasi',
-                onPressed: state.previewMode ? onOpen : state.togglePlay,
-                icon: Icon(
-                  state.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  color: SonoraColors.primary,
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class EmptyLibrary extends StatelessWidget {
-  const EmptyLibrary({
-    super.key,
-    required this.kind,
-    required this.onImport,
-    this.onPreview,
-  });
+  const EmptyLibrary({super.key, required this.kind, required this.onImport});
   final MediaKind kind;
   final VoidCallback onImport;
-  final VoidCallback? onPreview;
   @override
   Widget build(BuildContext context) {
     final isVideo = kind == MediaKind.video;
@@ -364,7 +234,7 @@ class EmptyLibrary extends StatelessWidget {
               Text(
                 isVideo
                     ? 'Impor MP4 dari perangkat dan nikmati koleksi tanpa koneksi internet.'
-                    : 'Impor musik dari perangkat. File asli tetap di tempatnya, tanpa unggah ke server.',
+                    : 'Impor musik dari perangkat. Berkas asli tetap di tempatnya, tanpa unggah ke server.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: SonoraColors.muted),
@@ -375,13 +245,6 @@ class EmptyLibrary extends StatelessWidget {
                 icon: const Icon(Icons.add_rounded),
                 label: Text(isVideo ? 'Impor video' : 'Impor musik'),
               ),
-              const SizedBox(height: 12),
-              if (onPreview != null)
-                TextButton.icon(
-                  onPressed: onPreview,
-                  icon: const Icon(Icons.visibility_outlined),
-                  label: const Text('Lihat tampilan contoh'),
-                ),
               const SizedBox(height: 16),
               const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -414,90 +277,328 @@ void showAppMessage(BuildContext context, String message) {
     );
 }
 
-Future<void> showImportPreview(
-  BuildContext context, {
-  required MediaKind kind,
-}) async {
-  var selected = kind;
-  final accepted = await showModalBottomSheet<bool>(
+/// Menampilkan pesan tertunda dari state (kesalahan simpan, berkas hilang, dan
+/// sejenisnya) sekali saja.
+void showPendingNotice(BuildContext context) {
+  final state = SonoraScope.of(context);
+  final notice = state.takeNotice();
+  if (notice != null) showAppMessage(context, notice);
+}
+
+/// Menjalankan alur impor lengkap: dialog progres, ringkasan hasil, dan pesan
+/// kesalahan yang spesifik.
+Future<void> runMediaImport(BuildContext context, MediaKind kind) async {
+  final state = SonoraScope.of(context);
+  if (state.importing) return;
+  final label = kind == MediaKind.audio ? 'musik' : 'video';
+  BuildContext? dialogContext;
+  final dialogReady = showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (context, setState) => SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const MediaIllustration(dimension: 116),
-              const SizedBox(height: 8),
-              Text(
-                'Impor dari perangkat',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Pilih jenis media. Tidak ada file yang diunggah.',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: SonoraColors.muted),
-              ),
-              const SizedBox(height: 24),
-              SegmentedButton<MediaKind>(
-                segments: const [
-                  ButtonSegment(
-                    value: MediaKind.audio,
-                    label: Text('Musik'),
-                    icon: Icon(Icons.music_note_rounded),
+    barrierDismissible: false,
+    builder: (sheetContext) {
+      dialogContext = sheetContext;
+      return AnimatedBuilder(
+        animation: state,
+        builder: (context, _) {
+          final progress = state.importProgress;
+          final total = progress?.total ?? 0;
+          final processed = progress?.processed ?? 0;
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: Text('Mengimpor $label'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LinearProgressIndicator(
+                    value: total == 0 ? null : (processed / total).clamp(0, 1),
                   ),
-                  ButtonSegment(
-                    value: MediaKind.video,
-                    label: Text('Video'),
-                    icon: Icon(Icons.videocam_outlined),
+                  const SizedBox(height: 16),
+                  Text(
+                    progress?.fileName ?? 'Membuka pemilih berkas…',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  if (total > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '$processed dari $total berkas',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'Berkas disalin ke penyimpanan aplikasi agar tetap dapat '
+                    'diputar setelah aplikasi ditutup. Berkas asli tidak diubah.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-                selected: {selected},
-                onSelectionChanged: (selection) =>
-                    setState(() => selected = selection.first),
               ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: SonoraColors.warning.withValues(alpha: .08),
-                  borderRadius: BorderRadius.circular(12),
+            ),
+          );
+        },
+      );
+    },
+  );
+  await Future<void>.delayed(Duration.zero);
+  final report = await state.importMedia(kind);
+  if (dialogContext != null && dialogContext!.mounted) {
+    Navigator.of(dialogContext!).pop();
+  }
+  await dialogReady;
+  if (!context.mounted) return;
+  final notice = state.takeNotice();
+  if (notice != null) {
+    showAppMessage(context, notice);
+    return;
+  }
+  if (report == null || report.isEmpty) {
+    showAppMessage(context, 'Tidak ada berkas yang dipilih.');
+    return;
+  }
+  await showImportSummary(context, report);
+}
+
+/// Ringkasan hasil impor sesuai PRD bagian 8.4.
+Future<void> showImportSummary(
+  BuildContext context,
+  ImportReport report,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Impor selesai'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _SummaryRow(
+              icon: Icons.check_circle_outline_rounded,
+              color: SonoraColors.success,
+              text: '${report.importedCount} berkas ditambahkan',
+            ),
+            _SummaryRow(
+              icon: Icons.copy_all_outlined,
+              color: SonoraColors.muted,
+              text: '${report.duplicateCount} duplikat dilewati',
+            ),
+            _SummaryRow(
+              icon: Icons.error_outline_rounded,
+              color: report.rejectedCount == 0
+                  ? SonoraColors.muted
+                  : SonoraColors.warning,
+              text: '${report.rejectedCount} berkas tidak didukung',
+            ),
+            if (report.rejected.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final outcome in report.rejected.take(5))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    '• ${outcome.fileName}: ${outcome.reason ?? 'tidak didukung'}',
+                    style: Theme.of(dialogContext).textTheme.bodySmall,
+                  ),
                 ),
-                child: Text(
-                  'Integrasi file picker belum tersedia pada tahap frontend. Tidak ada file yang akan dibaca.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Tutup'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text)),
+      ],
+    ),
+  );
+}
+
+/// Menu opsi media yang dipakai Home, Library, dan daftar lainnya.
+Future<void> showMediaOptions(BuildContext context, MediaItem item) async {
+  final state = SonoraScope.of(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+              leading: MediaArtwork.forItem(item, dimension: 56),
+              title: Text(item.title, maxLines: 2),
+              subtitle: Text(item.artist),
+            ),
+            const Divider(),
+            if (item.kind == MediaKind.audio) ...[
+              ListTile(
+                leading: const Icon(Icons.play_circle_outline_rounded),
+                title: const Text('Putar sekarang'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  state.playItem(item);
+                },
               ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: () => Navigator.pop(sheetContext, true),
-                icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('Pilih file dari perangkat'),
+              ListTile(
+                leading: const Icon(Icons.queue_music_rounded),
+                title: const Text('Tambahkan ke antrean'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  state.enqueue(item.id);
+                },
               ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(sheetContext, false),
-                child: const Text('Batal'),
+              ListTile(
+                leading: const Icon(Icons.playlist_add_rounded),
+                title: const Text('Tambahkan ke playlist'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  showAddToPlaylist(context, item);
+                },
               ),
             ],
-          ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: SonoraColors.danger,
+              ),
+              title: const Text(
+                'Hapus dari library',
+                style: TextStyle(color: SonoraColors.danger),
+              ),
+              subtitle: const Text(
+                'Salinan aplikasi dihapus, berkas asli tetap',
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                confirmRemoveFromLibrary(context, item);
+              },
+            ),
+          ],
         ),
       ),
     ),
   );
-  if (accepted == true && context.mounted) {
-    showAppMessage(
-      context,
-      'File picker belum terhubung. Tidak ada media yang diimpor.',
-    );
-  }
+}
+
+Future<void> confirmRemoveFromLibrary(
+  BuildContext context,
+  MediaItem item,
+) async {
+  final state = SonoraScope.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Hapus dari library?'),
+      content: Text(
+        '“${item.title}” akan dihapus dari library SONORA beserta salinan yang '
+        'dibuat saat impor. Berkas asli di perangkat tidak dihapus.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: SonoraColors.danger),
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Hapus'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  await state.removeFromLibrary(item.id);
+  if (!context.mounted) return;
+  showAppMessage(context, 'Media dihapus dari library.');
+}
+
+/// Dialog menambahkan satu media ke playlist yang sudah ada.
+Future<void> showAddToPlaylist(BuildContext context, MediaItem item) async {
+  final state = SonoraScope.of(context);
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: Text(
+                'Tambahkan “${item.title}” ke',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            if (state.playlists.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+                child: Text(
+                  'Belum ada playlist. Buat playlist terlebih dahulu.',
+                ),
+              ),
+            ...state.playlists.map((playlist) {
+              final exists = playlist.trackIds.contains(item.id);
+              return ListTile(
+                leading: const Icon(Icons.queue_music_rounded),
+                title: Text(playlist.name),
+                subtitle: Text(
+                  exists
+                      ? 'Sudah ada di playlist'
+                      : '${playlist.trackIds.length} lagu',
+                ),
+                trailing: exists
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: SonoraColors.success,
+                      )
+                    : const Icon(Icons.add_rounded),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  if (exists) {
+                    showAppMessage(
+                      context,
+                      'Lagu sudah ada di playlist tersebut.',
+                    );
+                    return;
+                  }
+                  await state.addToPlaylist(playlist.id, item.id);
+                  if (!context.mounted) return;
+                  showPendingNotice(context);
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    ),
+  );
 }

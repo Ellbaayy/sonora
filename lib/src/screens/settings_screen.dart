@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
+import '../app_state.dart';
 import '../artwork.dart';
-import '../preview_state.dart';
+import '../media/media_item.dart';
 import '../theme.dart';
 import '../widgets/shared.dart';
 import 'library_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
+    final unavailable = state.songs.where((song) => !song.available).length;
+    final repeatLabel = switch (state.repeat) {
+      SonoraRepeat.off => 'mati',
+      SonoraRepeat.one => 'satu lagu',
+      SonoraRepeat.all => 'semua',
+    };
     return ListView(
       padding: const EdgeInsets.only(bottom: 28),
       children: [
@@ -19,11 +26,6 @@ class SettingsScreen extends StatelessWidget {
           title: 'Pengaturan',
           subtitle: 'Atur ruang dengarmu.',
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          child: PreviewNotice(compact: true),
-        ),
-        const SizedBox(height: 24),
         const _GroupLabel('TAMPILAN'),
         const _SettingsGroup(
           children: [
@@ -74,14 +76,13 @@ class SettingsScreen extends StatelessWidget {
               icon: Icons.repeat_rounded,
               title: 'Preferensi pemutaran',
               subtitle:
-                  'Repeat, shuffle, dan autoplay diatur dari preview player',
+                  'Repeat $repeatLabel • acak ${state.shuffle ? 'aktif' : 'mati'}',
               trailing: IconButton(
                 tooltip: 'Baca status preferensi',
                 onPressed: () => showAppMessage(
                   context,
-                  'Aksen, Reduce Motion, mode repeat, dan shuffle tersimpan di '
-                  'perangkat dan dipulihkan saat aplikasi dibuka kembali. '
-                  'Antrean dan playlist preview masih sementara.',
+                  'Repeat dan shuffle diatur dari layar Now Playing. Semua '
+                  'preferensi tersimpan di perangkat.',
                 ),
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
@@ -92,44 +93,60 @@ class SettingsScreen extends StatelessWidget {
         _SettingsGroup(
           children: [
             _SettingRow(
-              icon: state.previewMode
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              title: 'Tampilan data contoh',
-              subtitle: state.previewMode
-                  ? 'Koleksi contoh sedang ditampilkan'
-                  : 'Koleksi kosong sedang ditampilkan',
-              trailing: Switch(
-                value: state.previewMode,
-                onChanged: (value) {
-                  value ? state.showPreview() : state.showEmptyLibrary();
-                },
+              icon: Icons.library_music_outlined,
+              title: 'Isi library',
+              subtitle:
+                  '${state.songs.length} lagu • ${state.videos.length} video',
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: SonoraColors.muted,
+              ),
+            ),
+            _StorageRow(
+              key: ValueKey(
+                'storage-${state.songs.length}-${state.videos.length}',
               ),
             ),
             _SettingRow(
-              icon: Icons.folder_open_outlined,
-              title: 'Impor media',
-              subtitle: 'MP3 dan MP4 • integrasi perangkat belum aktif',
+              icon: Icons.audio_file_outlined,
+              title: 'Impor musik',
+              subtitle: 'MP3, M4A, AAC, WAV, FLAC, OGG, OPUS',
               trailing: IconButton(
-                tooltip: 'Buka alur impor',
-                onPressed: () =>
-                    showImportPreview(context, kind: MediaKind.audio),
+                tooltip: 'Impor musik dari perangkat',
+                onPressed: () => runMediaImport(context, MediaKind.audio),
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
             ),
             _SettingRow(
-              icon: Icons.storage_outlined,
-              title: 'Informasi penyimpanan',
-              subtitle: 'Belum ada media perangkat yang dipindai',
+              icon: Icons.video_file_outlined,
+              title: 'Impor video',
+              subtitle: 'MP4, M4V, MKV, WEBM, 3GP',
               trailing: IconButton(
-                tooltip: 'Lihat status penyimpanan',
-                onPressed: () => showAppMessage(
-                  context,
-                  'Penggunaan penyimpanan belum dapat dihitung sebelum integrasi media dan database lokal.',
+                tooltip: 'Impor video dari perangkat',
+                onPressed: () => runMediaImport(context, MediaKind.video),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ),
+            if (unavailable > 0)
+              _SettingRow(
+                icon: Icons.cleaning_services_outlined,
+                title: 'Bersihkan media tidak tersedia',
+                subtitle: '$unavailable media tidak dapat diakses',
+                trailing: IconButton(
+                  tooltip: 'Hapus media tidak tersedia',
+                  onPressed: () async {
+                    final removed = await state.removeUnavailableMedia();
+                    if (!context.mounted) return;
+                    showAppMessage(
+                      context,
+                      removed == 0
+                          ? 'Tidak ada media yang perlu dibersihkan.'
+                          : '$removed media dibersihkan dari library.',
+                    );
+                  },
+                  icon: const Icon(Icons.chevron_right_rounded),
                 ),
-                icon: const Icon(Icons.chevron_right_rounded),
               ),
-            ),
           ],
         ),
         const _GroupLabel('PRIVASI & APLIKASI'),
@@ -148,7 +165,7 @@ class SettingsScreen extends StatelessWidget {
             _SettingRow(
               icon: Icons.info_outline_rounded,
               title: 'Tentang SONORA',
-              subtitle: 'Versi 0.1.0 • tahap frontend',
+              subtitle: 'Versi 1.0.0',
               trailing: IconButton(
                 tooltip: 'Tentang aplikasi',
                 onPressed: () => _showAbout(context),
@@ -177,8 +194,20 @@ class SettingsScreen extends StatelessWidget {
         content: SingleChildScrollView(
           child: Text(
             privacy
-                ? 'Fungsi inti dirancang untuk bekerja secara lokal. Tahap ini tidak mengimpor, membaca, atau mengunggah media perangkat. Tidak ada akun maupun telemetri. Penghapusan item dari library tidak boleh menghapus file asli.'
-                : 'Pemutar musik dan video lokal offline-first.\n\nVersi 0.1.0 merupakan preview antarmuka dengan lapisan data lokal: database SQLite, repository media/playlist/antrean, dan preferensi yang bertahan setelah aplikasi dibuka kembali. File picker, pemutaran media, dan persistensi antrean/playlist belum diimplementasikan.\n\nArtwork dan ilustrasi digambar secara lokal oleh kode aplikasi. Font Manrope digunakan berdasarkan SIL Open Font License; salinan lisensi disertakan dalam proyek. Tidak ada aset Storyset yang digunakan pada tahap ini.',
+                ? 'Seluruh fungsi berjalan lokal: pemutaran, pencarian, antrean, '
+                      'playlist, dan metadata tersimpan di perangkat ini. Tidak '
+                      'ada akun, unggahan media, atau telemetri. Aplikasi meminta '
+                      'akses berkas hanya melalui pemilih berkas sistem saat '
+                      'kamu mengimpor media, dan izin notifikasi hanya untuk '
+                      'kontrol pemutaran. Menghapus item dari library tidak '
+                      'menghapus berkas asli di perangkat.'
+                : 'Pemutar musik dan video lokal offline-first.\n\n'
+                      'Versi 1.0.0 memuat impor media dari perangkat, pemutaran '
+                      'MP3 dan MP4, antrean serta playlist yang tersimpan, '
+                      'notifikasi media, dan pemulihan posisi terakhir.\n\n'
+                      'Artwork diambil dari cover di dalam berkas bila tersedia; '
+                      'bila tidak, aplikasi menggambar artwork sendiri. Font '
+                      'Manrope digunakan berdasarkan SIL Open Font License.',
           ),
         ),
         actions: [
@@ -189,6 +218,42 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _StorageRow extends StatelessWidget {
+  const _StorageRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = SonoraScope.of(context);
+    return FutureBuilder<StorageSummary>(
+      future: state.storageSummary(),
+      builder: (context, snapshot) {
+        final summary = snapshot.data;
+        return _SettingRow(
+          icon: Icons.storage_outlined,
+          title: 'Penyimpanan salinan media',
+          subtitle: summary == null
+              ? 'Menghitung…'
+              : '${_formatBytes(summary.bytes)} untuk '
+                    '${summary.audioCount + summary.videoCount} media',
+          trailing: const Icon(
+            Icons.chevron_right_rounded,
+            color: SonoraColors.muted,
+          ),
+        );
+      },
+    );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 }
 

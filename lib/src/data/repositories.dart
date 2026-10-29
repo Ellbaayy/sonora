@@ -623,4 +623,5 @@ abstract final class SettingsKeys {
   static const repeatMode = 'playback.repeat_mode';
   static const shuffle = 'playback.shuffle';
   static const volume = 'playback.volume';
+  static const favorites = 'library.favorites';
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
+import '../app_state.dart';
 import '../artwork.dart';
-import '../preview_state.dart';
+import '../media/media_item.dart';
 import '../theme.dart';
 import '../widgets/shared.dart';
 
@@ -26,9 +26,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     final results = state.search(query);
-    final recentSongs = state.songs.take(3).toList();
+    final recent = state.recentlyPlayed.take(6).toList();
+    final added = state.recentlyAdded.take(5).toList();
     final screenWidth = MediaQuery.sizeOf(context).width;
     final cardWidth = ((screenWidth - 60) / 2).clamp(128.0, 190.0);
     final textScaler = MediaQuery.textScalerOf(context);
@@ -37,13 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
         textScaler.scale(style?.fontSize ?? 14) * (style?.height ?? 1.2);
     // Tinggi dihitung dari skala teks agar kartu tidak terpotong pada
     // pembesaran font 1.3x (DESIGN bagian 4 dan 8).
-    final recentCardHeight =
+    final cardHeight =
         cardWidth +
         12 +
         lineHeight(textTheme.titleMedium) +
         4 +
         lineHeight(textTheme.bodySmall) +
         2;
+
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
@@ -64,13 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 32),
               Text(
                 'Dengarkan yang\nkamu simpan.',
-                style: Theme.of(context).textTheme.displaySmall,
+                style: textTheme.displaySmall,
               ),
               const SizedBox(height: 12),
               Text(
                 'Musik lokal. Ruangmu sendiri.',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: SonoraColors.muted),
+                style: textTheme.bodyMedium?.copyWith(
+                  color: SonoraColors.muted,
+                ),
               ),
               const SizedBox(height: 24),
               LocalSearchField(
@@ -80,23 +83,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   searching = value.trim().isNotEmpty;
                 }),
               ),
-              const SizedBox(height: 16),
-              if (state.previewMode && state.songs.isNotEmpty)
-                const PreviewNotice()
-              else ...[
-                const SizedBox(height: 32),
+              const SizedBox(height: 20),
+              if (state.songs.isEmpty) ...[
                 SizedBox(
-                  height: 420,
+                  height: 400,
                   child: EmptyLibrary(
                     kind: MediaKind.audio,
-                    onImport: () =>
-                        showImportPreview(context, kind: MediaKind.audio),
-                    onPreview: state.showPreview,
+                    onImport: () => runMediaImport(context, MediaKind.audio),
                   ),
                 ),
-              ],
-              if (state.previewMode && searching && state.songs.isNotEmpty) ...[
-                const SizedBox(height: 28),
+              ] else if (searching) ...[
                 SectionHeading(
                   'Hasil pencarian',
                   action: 'Tutup',
@@ -123,13 +119,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           'Tidak ada hasil untuk “$query”',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Coba judul, artis, atau album yang lain.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: SonoraColors.muted),
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: SonoraColors.muted,
+                          ),
                         ),
                       ],
                     ),
@@ -140,67 +137,59 @@ class _HomeScreenState extends State<HomeScreen> {
                       key: ValueKey(item.id),
                       item: item,
                       onTap: () {
-                        state.select(item);
+                        state.playItem(item);
                         widget.onOpenPlayer();
                       },
-                      onMenu: () => state.select(item),
+                      onMenu: () => showMediaOptions(context, item),
                     ),
                   ),
-              ] else if (state.previewMode && state.songs.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                SectionHeading(
-                  'Baru diputar',
-                  action: 'Lihat semua',
-                  onAction: () => state.setTab(1),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: recentCardHeight,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: recentSongs.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 16),
-                    itemBuilder: (context, index) {
-                      final item = recentSongs[index];
-                      return HorizontalMediaCard(
-                        item: item,
-                        width: cardWidth,
-                        onTap: () {
-                          state.select(item);
-                          widget.onOpenPlayer();
-                        },
-                      );
-                    },
+              ] else ...[
+                if (recent.isNotEmpty) ...[
+                  SectionHeading(
+                    'Baru diputar',
+                    action: 'Lihat semua',
+                    onAction: () => state.setTab(1),
                   ),
-                ),
-                const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: cardHeight,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      clipBehavior: Clip.none,
+                      itemCount: recent.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 16),
+                      itemBuilder: (context, index) {
+                        final item = recent[index];
+                        return HorizontalMediaCard(
+                          item: item,
+                          width: cardWidth,
+                          onTap: () {
+                            state.playItem(item);
+                            widget.onOpenPlayer();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
                 SectionHeading(
                   'Baru ditambahkan',
                   action: 'Impor',
-                  onAction: () =>
-                      showImportPreview(context, kind: MediaKind.audio),
+                  onAction: () => runMediaImport(context, MediaKind.audio),
                 ),
                 const SizedBox(height: 8),
-                ...state.songs
-                    .skip(3)
-                    .take(3)
-                    .map(
-                      (item) => MediaListTile(
-                        item: item,
-                        onTap: () {
-                          state.select(item);
-                          widget.onOpenPlayer();
-                        },
-                        onMenu: () {
-                          state.select(item);
-                          showAppMessage(
-                            context,
-                            'Item dipilih. Buka Library untuk opsi media.',
-                          );
-                        },
-                      ),
-                    ),
+                ...added.map(
+                  (item) => MediaListTile(
+                    key: ValueKey('added-${item.id}'),
+                    item: item,
+                    onTap: () {
+                      state.playItem(item);
+                      widget.onOpenPlayer();
+                    },
+                    onMenu: () => showMediaOptions(context, item),
+                  ),
+                ),
                 const SizedBox(height: 28),
                 SectionHeading(
                   'Playlist kamu',
@@ -223,7 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text(
                             'Belum ada playlist',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: textTheme.titleMedium,
                           ),
                           const SizedBox(height: 12),
                           OutlinedButton(
@@ -272,7 +261,7 @@ class _PlaylistPreviewCard extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
-    final count = PreviewScope.of(context).songsInPlaylist(playlist.id).length;
+    final count = SonoraScope.of(context).songsInPlaylist(playlist.id).length;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(

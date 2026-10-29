@@ -1,12 +1,37 @@
+import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 
 import 'src/app_shell.dart';
+import 'src/app_state.dart';
 import 'src/data/backend.dart';
-import 'src/preview_state.dart';
+import 'src/data/database.dart';
+import 'src/media/media_library.dart';
+import 'src/playback/audio_handler.dart';
 import 'src/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Pemutaran berjalan di background service agar notifikasi media dan kontrol
+  // headset bekerja. Konfigurasi sesi audio memakai profil musik.
+  final handler = await AudioService.init(
+    builder: SonoraAudioHandler.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'id.sonora.sonora.audio',
+      androidNotificationChannelName: 'Pemutaran SONORA',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+    ),
+  );
+  try {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+  } catch (error) {
+    debugPrint('SONORA: sesi audio tidak dapat dikonfigurasi ($error)');
+  }
+  final engine = AudioServiceEngine(handler);
 
   SonoraBackend? backend;
   String? startupWarning;
@@ -14,54 +39,56 @@ Future<void> main() async {
     backend = await SonoraBackend.open();
   } catch (error) {
     // Database rusak atau migrasi gagal tidak boleh membuat aplikasi gagal
-    // dibuka; pengguna diberi tahu bahwa perubahan tidak akan tersimpan.
-    startupWarning =
-        'Data lokal tidak dapat dibuka. Perubahan pengaturan tidak akan '
-        'tersimpan pada sesi ini.';
+    // dibuka. Mode sementara memakai database di memori agar UI tetap dapat
+    // dipakai, dengan pemberitahuan bahwa perubahan tidak tersimpan.
     debugPrint('SONORA: database gagal dibuka ($error)');
+    startupWarning =
+        'Penyimpanan lokal tidak dapat dibuka. Perubahan pada sesi ini tidak '
+        'akan tersimpan setelah aplikasi ditutup.';
+    backend = SonoraBackend(SonoraDatabase(NativeDatabase.memory()));
   }
 
-  final state = PreviewState(settings: backend?.settings);
-  if (backend != null) {
-    await state.restorePreferences();
+  MediaLibraryService? library;
+  try {
+    final storage = await MediaStorage.open();
+    library = MediaLibraryService(
+      backend: backend,
+      picker: FilePickerMediaPicker(),
+      storage: storage,
+    );
+  } catch (error) {
+    debugPrint('SONORA: penyimpanan media tidak siap ($error)');
+    startupWarning ??=
+        'Folder media aplikasi tidak dapat disiapkan. Impor dinonaktifkan '
+        'pada sesi ini.';
   }
+
+  final state = SonoraState(
+    engine,
+    backend: backend,
+    library: library,
+    disposeEngine: false,
+  );
+  // Tombol next/previous pada notifikasi memakai aturan urutan yang sama
+  // dengan UI (antrean lebih dulu, lalu library).
+  handler.onSkipNext = state.next;
+  handler.onSkipPrevious = state.previous;
+  await state.init();
 
   runApp(SonoraApp(state: state, startupWarning: startupWarning));
 }
 
-class SonoraApp extends StatefulWidget {
-  const SonoraApp({super.key, this.state, this.startupWarning});
+class SonoraApp extends StatelessWidget {
+  const SonoraApp({super.key, required this.state, this.startupWarning});
 
-  /// Status yang disuntikkan dari `main`; bila `null` aplikasi membuat sendiri.
-  final PreviewState? state;
+  final SonoraState state;
 
   /// Pesan yang ditampilkan sekali ketika lapisan data gagal disiapkan.
   final String? startupWarning;
 
   @override
-  State<SonoraApp> createState() => _SonoraAppState();
-}
-
-class _SonoraAppState extends State<SonoraApp> {
-  late final PreviewState state;
-  late final bool _ownsState;
-
-  @override
-  void initState() {
-    super.initState();
-    _ownsState = widget.state == null;
-    state = widget.state ?? PreviewState();
-  }
-
-  @override
-  void dispose() {
-    if (_ownsState) state.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return PreviewScope(
+    return SonoraScope(
       state: state,
       child: AnimatedBuilder(
         animation: state,
@@ -72,23 +99,9 @@ class _SonoraAppState extends State<SonoraApp> {
             cyanAccent: state.cyanAccent,
             reduceMotion: state.reduceMotion,
           ),
-          home: AppShell(startupWarning: widget.startupWarning),
+          home: AppShell(startupWarning: startupWarning),
         ),
       ),
     );
-  }
-}
-
-class PreviewScope extends InheritedNotifier<PreviewState> {
-  const PreviewScope({
-    super.key,
-    required PreviewState state,
-    required super.child,
-  }) : super(notifier: state);
-
-  static PreviewState of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<PreviewScope>();
-    assert(scope != null, 'PreviewScope tidak ditemukan.');
-    return scope!.notifier!;
   }
 }

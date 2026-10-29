@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../main.dart';
-import '../artwork.dart';
-import '../preview_state.dart';
+import '../app_state.dart';
+import '../media/media_item.dart';
 import '../theme.dart';
 import '../widgets/shared.dart';
-import 'playlists_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key, required this.onOpenPlayer});
@@ -35,16 +33,22 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
-    if (!state.previewMode) {
+    final state = SonoraScope.of(context);
+    if (state.songs.isEmpty) {
       return Column(
         children: [
-          const ScreenHeader(title: 'Pustaka musik'),
+          ScreenHeader(
+            title: 'Pustaka musik',
+            action: IconButton(
+              tooltip: 'Impor musik',
+              onPressed: () => runMediaImport(context, MediaKind.audio),
+              icon: const Icon(Icons.add_rounded),
+            ),
+          ),
           Expanded(
             child: EmptyLibrary(
               kind: MediaKind.audio,
-              onImport: () => showImportPreview(context, kind: MediaKind.audio),
-              onPreview: state.showPreview,
+              onImport: () => runMediaImport(context, MediaKind.audio),
             ),
           ),
         ],
@@ -54,18 +58,23 @@ class _LibraryScreenState extends State<LibraryScreen>
     songs = [...songs]
       ..sort(
         (a, b) => switch (state.sort) {
-          'Judul' => a.title.compareTo(b.title),
-          'Artis' => a.artist.compareTo(b.artist),
+          'Judul' => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+          'Artis' => a.artist.toLowerCase().compareTo(b.artist.toLowerCase()),
           'Durasi' => a.duration.compareTo(b.duration),
-          _ => b.id.compareTo(a.id),
+          _ => (b.lastPlayedAt ?? 0).compareTo(a.lastPlayedAt ?? 0),
         },
       );
     return NestedScrollView(
       headerSliverBuilder: (context, innerBoxIsScrolled) => [
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: ScreenHeader(
             title: 'Pustaka musik',
             subtitle: 'Semua yang kamu simpan, dalam satu tempat.',
+            action: IconButton(
+              tooltip: 'Impor musik',
+              onPressed: () => runMediaImport(context, MediaKind.audio),
+              icon: const Icon(Icons.add_rounded),
+            ),
           ),
         ),
         SliverToBoxAdapter(
@@ -82,7 +91,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                   children: [
                     Expanded(
                       child: Text(
-                        '${songs.length} lagu contoh',
+                        '${songs.length} lagu',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -246,7 +255,7 @@ class _SongList extends StatelessWidget {
   final VoidCallback onOpenPlayer;
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final state = SonoraScope.of(context);
     if (songs.isEmpty) {
       return Center(
         child: Padding(
@@ -262,89 +271,21 @@ class _SongList extends StatelessWidget {
     }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      itemCount: songs.length + 1,
+      itemCount: songs.length,
       itemBuilder: (context, index) {
-        if (index == songs.length) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 24),
-            child: PreviewNotice(compact: true),
-          );
-        }
         final song = songs[index];
         return MediaListTile(
           key: ValueKey(song.id),
           item: song,
           onTap: () {
-            state.select(song);
+            state.playItem(song);
             onOpenPlayer();
           },
-          onMenu: () => _showOptions(context, song),
+          onMenu: () => showMediaOptions(context, song),
         );
       },
     );
   }
-}
-
-void _showOptions(BuildContext context, MediaItem item) {
-  final state = PreviewScope.of(context);
-  showModalBottomSheet<void>(
-    context: context,
-    builder: (sheetContext) => SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              contentPadding: const EdgeInsets.all(20),
-              leading: MediaArtwork(style: item.style, dimension: 56),
-              title: Text(item.title),
-              subtitle: Text(item.artist),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.queue_music_rounded),
-              title: const Text('Tambahkan ke antrean'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                state.enqueue(item.id);
-                showAppMessage(
-                  context,
-                  'Ditambahkan ke antrean preview. Belum tersimpan setelah restart.',
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.playlist_add_rounded),
-              title: const Text('Tambahkan ke playlist'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                showAddToPlaylist(context, item);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline_rounded,
-                color: SonoraColors.danger,
-              ),
-              title: const Text(
-                'Hapus item contoh',
-                style: TextStyle(color: SonoraColors.danger),
-              ),
-              subtitle: const Text('Tidak ada file perangkat yang dihapus'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                state.hideMedia(item.id);
-                showAppMessage(
-                  context,
-                  'Item contoh disembunyikan dari library.',
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _GroupedCollection extends StatelessWidget {
@@ -356,10 +297,14 @@ class _GroupedCollection extends StatelessWidget {
   final VoidCallback onOpenPlayer;
   @override
   Widget build(BuildContext context) {
-    final songs = PreviewScope.of(context).songs;
+    final state = SonoraScope.of(context);
+    final songs = state.songs;
     final names = <String>{
       for (final song in songs) groupByArtist ? song.artist : song.album,
     }.toList()..sort();
+    if (names.isEmpty) {
+      return const Center(child: Text('Belum ada lagu di library.'));
+    }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       itemCount: names.length,
@@ -393,9 +338,10 @@ class _GroupedCollection extends StatelessWidget {
                   (song) => MediaListTile(
                     item: song,
                     onTap: () {
-                      PreviewScope.of(context).select(song);
+                      state.playItem(song);
                       onOpenPlayer();
                     },
+                    onMenu: () => showMediaOptions(context, song),
                     trailing: const SizedBox(width: 12),
                   ),
                 )

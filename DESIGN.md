@@ -57,24 +57,23 @@ Semua komponen memakai token berikut. Proporsi sasaran 60% latar gelap, 30% perm
 
 - Basis 4; langkah 4, 8, 12, 16, 20, 24, 32, 40.
 - Padding horizontal layar 20; jarak antar bagian 28; jarak internal kartu 12–20.
-- Safe area dimiliki shell. Konten utama scroll sendiri; bottom navigation tetap, mini player di atasnya. Layar player menjadi route terpisah agar kontrol tidak tertutup mini player.
+- Safe area dimiliki shell. Konten utama scroll sendiri; navigasi berbentuk **dynamic island** (kapsul mengambang) dengan mini player sebagai kapsul kecil di atasnya. Layar player menjadi route terpisah agar kontrol tidak tertutup navigasi.
 - Lebar maksimum konten pada perangkat besar 680; layar sempit memakai satu kolom, artwork horizontal hanya bila ruang cukup.
-- Home: header → pencarian → banner status pratinjau → Recently Played → Recently Added → Your Playlists.
+- Home: header → pencarian → Recently Played → Recently Added → Your Playlists.
 - Library: tab Songs/Artists/Albums, pencarian, sort/filter, daftar/grid sesuai tab. Videos memakai grid dua kolom pada lebar 360+.
-- Playlist mendukung create/rename/delete serta detail dengan Play All dan Shuffle. Reorder dan perubahan isi nyata menunggu repository lokal; tidak boleh disajikan sebagai berhasil tersimpan.
-- Empty state menawarkan impor file; impor adalah alur UI awal dan pembukaan picker belum diklaim bekerja sebelum integrasi native.
+- Playlist mendukung create/rename/delete serta detail dengan Play All, Shuffle, tambah lagu, dan reorder drag-and-drop. Semua perubahan tersimpan di database lokal.
+- Empty state menawarkan impor berkas; impor membuka pemilih berkas sistem, menampilkan progres, lalu ringkasan berhasil/duplikat/ditolak.
 
 ## 5. Components
 
 - `AppButton`: primary (satu per layar), secondary, text, danger; tinggi minimal 48; default, pressed, focus-visible, disabled, loading.
 - `IconControl`: tooltip, semantics, 48x48; player utama 64x64; status aktif memakai ikon dan label/tooltip, bukan warna saja.
 - `SearchField`: label aksesibel, clear button, focus ring, hasil kosong, input error jika pencarian gagal.
-- `MediaTile` / `MediaCard`: artwork, judul, artis, durasi, menu; tekan membuka detail player contoh; item aktif diberi ikon equalizer dan label "Sedang dipilih".
-- `AppNavigationBar`: lima destinasi bernama Home, Library, Playlist, Video, Settings; icon+label; tidak bergantung pada warna.
-- `MiniPlayer`: artwork, judul, pause/play simulasi, buka player; tidak ada jika tidak ada item dipilih.
-- `Slider`: seek dan volume bernilai UI lokal; seek diberi label "simulasi" pada player dan tidak memengaruhi file audio.
-- `ModalSheet` dan `Dialog`: aksi tambah playlist, rename, delete confirmation; input kosong memunculkan error yang dapat diperbaiki.
-- `PreviewNotice`: ikon info + teks singkat bahwa media belum berasal dari perangkat.
+- `MediaTile` / `MediaCard`: artwork (cover asli bila ada), judul, artis, durasi, menu; tekan memutar media; item aktif diberi ikon equalizer dan warna primer.
+- `DynamicIslandNavigation`: kapsul mengambang berisi lima destinasi (Home, Library, Playlist, Video, Settings). Item aktif mengembang dan menampilkan label; label disembunyikan otomatis saat lebar kapsul < 330 atau skala teks besar. Kapsul memakai blur latar, border, dan bayangan tunggal.
+- `IslandMiniPlayer`: kapsul kecil di atas navigasi berisi artwork, judul, progres tipis, dan tombol play/pause; tidak ada jika tidak ada media dipilih.
+- `Slider`: seek dan volume mengontrol pemutaran nyata; nilai posisi berasal dari stream pemutar.
+- `ModalSheet` dan `Dialog`: aksi tambah playlist, rename, delete confirmation, ringkasan impor; input kosong memunculkan error yang dapat diperbaiki.
 - `MediaIllustration`: bentuk headphone/vinyl lokal, tanpa teks penting di dalam gambar; decorative untuk screen reader.
 - Empty: artwork kecil + penjelasan + satu aksi impor; loading: skeleton atau progress terpusat; error: pesan + retry; disabled: opacity dan callback nonaktif.
 
@@ -90,7 +89,8 @@ Semua komponen memakai token berikut. Proporsi sasaran 60% latar gelap, 30% perm
 
 - Latar solid deep navy; lapisan dibedakan oleh permukaan dan border halus. Tidak ada bayangan pada setiap kartu.
 - Gradient hanya pada logo/artwork dan player utama; glow satu sumber pada artwork now playing dengan opacity terbatas.
-- Tidak ada backdrop blur rutin; mini player memakai permukaan solid agar teks tetap terbaca dan hemat baterai.
+- Blur latar (`BackdropFilter`) hanya dipakai pada dynamic island dan mini player yang mengambang di atas konten; permukaan lain tetap solid.
+- Equalizer dekoratif berhenti saat jeda atau saat Reduce Motion aktif.
 
 ## 8. Accessibility Constraints & Accepted Debt
 
@@ -98,8 +98,9 @@ Semua komponen memakai token berikut. Proporsi sasaran 60% latar gelap, 30% perm
 - Status selected/playing menggabungkan ikon dan teks/tooltip, bukan warna saja. Teks utama/surface memenuhi target 4.5:1; hasil pengukuran final perlu diverifikasi pada implementasi.
 - Search tetap dapat digunakan dengan keyboard; urutan fokus mengikuti urutan visual; aksi destruktif perlu konfirmasi.
 - Konten dapat discroll pada text scaling; QA minimum pada 1.0 dan 1.3.
-- Hutang yang diterima secara eksplisit: database SQLite sudah tersedia dan menyimpan preferensi,
-  tetapi import native, playback MP3/MP4, persistensi antrean/playlist ke database, video rendering,
-  izin, dan media notification belum diimplementasikan. Seluruh aksi tersebut harus memiliki
-  penjelasan status, bukan sukses palsu.
-- Pengujian TalkBack, perangkat fisik, performa animasi pada perangkat lambat, dan distribusi release bukan bukti yang tersedia dari tahap ini.
+- Hutang yang diterima secara eksplisit: thumbnail video dari frame asli belum dibuat (memakai
+  artwork prosedural), posisi video tidak dilanjutkan setelah keluar pemutar, dan tidak ada
+  Picture-in-Picture. Paket rilis bertanda tangan serta distribusi Play Store belum disiapkan.
+- Pengujian TalkBack pada perangkat fisik, performa animasi pada perangkat lambat, dan
+  distribusi release bukan bukti yang tersedia dari tahap ini. Bukti yang ada: 42 pengujian
+  otomatis, `flutter analyze` bersih, dan build APK debug.

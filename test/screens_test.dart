@@ -1,339 +1,184 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sonora/main.dart';
 import 'package:sonora/src/app_shell.dart';
-import 'package:sonora/src/preview_state.dart';
 import 'package:sonora/src/screens/home_screen.dart';
 import 'package:sonora/src/screens/player_screen.dart';
-import 'package:sonora/src/screens/videos_screen.dart';
-import 'package:sonora/src/theme.dart';
+import 'package:sonora/src/screens/playlists_screen.dart';
+import 'package:sonora/src/widgets/dynamic_island_nav.dart';
 
-Future<PreviewState> pumpScreen(
-  WidgetTester tester,
-  Widget child, {
-  Size size = const Size(412, 915),
-  double textScale = 1,
-}) async {
-  await tester.binding.setSurfaceSize(size);
-  tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = size;
-  final state = PreviewState();
-  await tester.pumpWidget(
-    PreviewScope(
-      state: state,
-      child: MaterialApp(
-        theme: sonoraTheme(),
-        home: MediaQuery(
-          data: MediaQueryData(
-            size: size,
-            textScaler: TextScaler.linear(textScale),
-          ),
-          child: child,
-        ),
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  addTearDown(() async {
-    state.dispose();
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
-    await tester.binding.setSurfaceSize(null);
-  });
-  return state;
-}
+import 'helpers.dart';
 
 void main() {
-  testWidgets('Now Playing menampilkan kontrol dan antrean preview', (
+  testWidgets('Home menampilkan lagu dari library, bukan data contoh', (
     tester,
   ) async {
-    final state = await pumpScreen(tester, const PlayerScreen());
-    expect(find.text('Midnight in Jakarta'), findsOneWidget);
-    expect(find.text('NOW PLAYING'), findsOneWidget);
-    expect(find.text('Pratinjau antarmuka'), findsOneWidget);
-    await tester.tap(find.byTooltip('Buka antrean'));
-    await tester.pumpAndSettle();
-    expect(find.text('Antrean'), findsOneWidget);
-    expect(find.text('Blue Hours'), findsOneWidget);
-    await tester.tap(find.byTooltip('Hapus Blue Hours dari antrean'));
-    await tester.pumpAndSettle();
-    expect(state.queue.map((item) => item.id), ['song-3', 'song-4']);
-    expect(tester.takeException(), isNull);
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Midnight in Jakarta', artist: 'Nara'),
+        audioDraft('b.mp3', title: 'Blue Hours', artist: 'Nara'),
+      ],
+    );
+    await pumpApp(tester, harness);
 
-    final firstItemActions = find
-        .ancestor(
-          of: find.byKey(const ValueKey('0-song-3')),
-          matching: find.byType(Semantics),
-        )
-        .evaluate()
-        .map((element) => element.widget as Semantics)
-        .firstWhere(
-          (widget) => widget.properties.customSemanticsActions != null,
-        )
-        .properties
-        .customSemanticsActions!;
-    expect(firstItemActions.length, 2);
-    firstItemActions.values.last();
-    await tester.pumpAndSettle();
-    expect(state.queue.map((item) => item.id), ['song-4', 'song-3']);
+    expect(find.text('Midnight in Jakarta'), findsWidgets);
+    expect(find.text('Baru ditambahkan'), findsOneWidget);
+    expect(find.text('Pratinjau antarmuka'), findsNothing);
+    expect(find.byType(IslandMiniPlayer), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Antrean mendukung drag dan konfirmasi pengosongan', (
+  testWidgets('library kosong menampilkan ajakan impor', (tester) async {
+    final harness = await createHarness();
+    await pumpApp(tester, harness);
+
+    expect(find.text('Impor musik'), findsOneWidget);
+    expect(find.text('Koleksimu. Tetap milikmu.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mini player dynamic island muncul setelah lagu diputar', (
     tester,
   ) async {
-    final state = await pumpScreen(tester, const QueueScreen());
-    await tester.tap(find.byTooltip('Hapus Blue Hours dari antrean'));
-    await tester.pumpAndSettle();
-    expect(state.queue.map((item) => item.id), ['song-3', 'song-4']);
-
-    final nextItem = find.byKey(const ValueKey('1-song-4'));
-    final dragHandle = find.descendant(
-      of: find.byKey(const ValueKey('0-song-3')),
-      matching: find.byIcon(Icons.drag_handle_rounded),
+    final harness = await createHarness(
+      seeds: [audioDraft('a.mp3', title: 'Midnight in Jakarta')],
     );
-    final offset =
-        tester.getBottomLeft(nextItem) +
-        const Offset(0, 24) -
-        tester.getCenter(dragHandle);
-    await tester.timedDrag(
-      dragHandle,
-      offset,
-      const Duration(milliseconds: 600),
-    );
+    await pumpApp(tester, harness);
+    await harness.state.playItem(harness.state.songs.single);
     await tester.pumpAndSettle();
-    expect(state.queue.map((item) => item.id), ['song-4', 'song-3']);
 
-    await tester.tap(find.byTooltip('Hapus seluruh antrean'));
+    expect(find.byType(IslandMiniPlayer), findsOneWidget);
+    expect(harness.state.isPlaying, isTrue);
+
+    await tester.tap(find.byTooltip('Jeda'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Batal'));
+    expect(harness.state.isPlaying, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Now Playing memutar, menjeda, dan menggeser posisi', (
+    tester,
+  ) async {
+    final harness = await createHarness(
+      seeds: [audioDraft('a.mp3', title: 'Midnight in Jakarta')],
+    );
+    await harness.state.playItem(harness.state.songs.single);
+    await harness.state.togglePlay();
+    await pumpScreen(tester, harness, const PlayerScreen());
+
+    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(find.text('Midnight in Jakarta'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Putar'));
     await tester.pumpAndSettle();
-    expect(state.queue, isNotEmpty);
+    expect(harness.state.isPlaying, isTrue);
+
+    await tester.tap(find.byType(Slider).first);
+    await tester.pumpAndSettle();
+    expect(harness.state.position, greaterThan(Duration.zero));
+
+    await tester.tap(find.byTooltip('Jeda'));
+    await tester.pumpAndSettle();
+    expect(harness.state.isPlaying, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('antrean dapat menghapus item dan dikosongkan', (tester) async {
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Alpha'),
+        audioDraft('b.mp3', title: 'Beta'),
+        audioDraft('c.mp3', title: 'Gamma'),
+      ],
+    );
+    final songs = harness.state.songs;
+    await harness.state.enqueue(songs[0].id);
+    await harness.state.enqueue(songs[1].id);
+    expect(harness.state.queueIds, [songs[0].id, songs[1].id]);
+    await pumpScreen(tester, harness, const QueueScreen());
+
+    expect(find.text(songs[0].title), findsWidgets);
+    await tester.tap(find.byTooltip('Hapus ${songs[0].title} dari antrean'));
+    await tester.pumpAndSettle();
+    expect(harness.state.queueIds, [songs[1].id]);
+
     await tester.tap(find.byTooltip('Hapus seluruh antrean'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Kosongkan'));
     await tester.pumpAndSettle();
     expect(find.text('Antrean masih kosong'), findsOneWidget);
+    expect(harness.state.queueIds, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Now Playing tidak overflow pada lebar 360 dan text scale 1.3', (
+  testWidgets('playlist baru menolak nama kosong lalu menyimpan nama valid', (
     tester,
   ) async {
-    await pumpScreen(
-      tester,
-      const PlayerScreen(),
-      size: const Size(360, 800),
-      textScale: 1.3,
+    final harness = await createHarness(
+      seeds: [audioDraft('a.mp3', title: 'Alpha')],
     );
-    await tester.scrollUntilVisible(
-      find.text('Kontrol seek dan volume hanya mengubah nilai preview.'),
-      80,
-    );
+    await pumpApp(tester, harness);
+    await tester.tap(find.byKey(const ValueKey('nav-Playlist')));
     await tester.pumpAndSettle();
-    expect(find.text('Playlist'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
 
-  testWidgets('Kelima navigasi dapat dibuka pada layar kecil', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(360, 800));
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(360, 800);
-    addTearDown(() async {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-      await tester.binding.setSurfaceSize(null);
-    });
-    await tester.pumpWidget(const SonoraApp());
-    await tester.pumpAndSettle();
-    for (final (label, expected) in [
-      ('Library', 'Pustaka musik'),
-      ('Playlist', 'Suasana yang berbeda, satu koleksi.'),
-      ('Video', 'Ruang video'),
-      ('Settings', 'Pengaturan'),
-      ('Home', 'SONORA'),
-    ]) {
-      await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle();
-      expect(find.text(expected), findsWidgets, reason: label);
-    }
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Playlist baru menolak nama kosong lalu menerima nama valid', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const SonoraApp());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Playlist').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Buat playlist baru'));
+    await tester.tap(find.byTooltip('Buat playlist baru').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(find.text('Nama playlist tidak boleh kosong.'), findsOneWidget);
+
     await tester.enterText(find.byType(TextField), 'Teman perjalanan');
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
-    expect(find.text('Teman perjalanan'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Teman perjalanan'),
-      180,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Teman perjalanan'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Belum ada lagu. Tambahkan melalui menu lagu di Library.'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byTooltip('Ubah nama playlist'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Perjalanan pulang');
-    await tester.tap(find.text('Simpan'));
-    await tester.pumpAndSettle();
-    expect(find.text('Perjalanan pulang'), findsOneWidget);
+    expect(find.text('Teman perjalanan'), findsWidgets);
+    expect(harness.state.playlists.single.name, 'Teman perjalanan');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Home tetap terbuka setelah jumlah playlist berkurang', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const SonoraApp());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Playlist').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Opsi playlist Easy Sunday'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus playlist'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Home').last);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Late Night'),
-      240,
-      scrollable: find.byType(Scrollable).first,
+  testWidgets('detail playlist memutar semua lagu ke antrean', (tester) async {
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Alpha'),
+        audioDraft('b.mp3', title: 'Beta'),
+      ],
     );
-    await tester.pumpAndSettle();
-    expect(find.text('Late Night'), findsOneWidget);
-    expect(find.text('Easy Sunday'), findsNothing);
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('Playlist').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Opsi playlist Late Night'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus playlist'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Home').last);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Belum ada playlist'),
-      240,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Belum ada playlist'), findsOneWidget);
-    expect(find.text('Buat playlist'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'Home menampilkan keadaan kosong setelah semua lagu disembunyikan',
-    (tester) async {
-      final state = PreviewState();
-      addTearDown(state.dispose);
-      for (final song in sampleSongs) {
-        state.hideMedia(song.id);
-      }
-      await tester.pumpWidget(
-        PreviewScope(
-          state: state,
-          child: MaterialApp(
-            theme: sonoraTheme(),
-            home: Scaffold(body: HomeScreen(onOpenPlayer: () {})),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Impor musik'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-
-      await tester.scrollUntilVisible(
-        find.text('Lihat tampilan contoh'),
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Lihat tampilan contoh'));
-      await tester.pumpAndSettle();
-      expect(state.previewMode, isTrue);
-      expect(find.text('Pratinjau antarmuka'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('Home tidak memaksa tiga kartu saat hanya dua lagu tersisa', (
-    tester,
-  ) async {
-    final state = PreviewState();
-    addTearDown(state.dispose);
-    for (final song in sampleSongs.take(4)) {
-      state.hideMedia(song.id);
+    await harness.state.createPlaylist('Malam');
+    final playlist = harness.state.playlists.single;
+    for (final song in harness.state.songs) {
+      await harness.state.addToPlaylist(playlist.id, song.id);
     }
-    await tester.pumpWidget(
-      PreviewScope(
-        state: state,
-        child: MaterialApp(
-          theme: sonoraTheme(),
-          home: Scaffold(body: HomeScreen(onOpenPlayer: () {})),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Analog Sunday'), findsOneWidget);
-    expect(find.text('The Way Home'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Video preview menjelaskan batas playback dan mengubah seek UI', (
-    tester,
-  ) async {
-    final state = await pumpScreen(
-      tester,
-      VideoPreviewScreen(video: sampleVideos.first),
-    );
-    await tester.tap(find.byTooltip('Pratinjau kontrol video'));
-    await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Pemutaran MP4 belum terhubung'),
-      findsOneWidget,
-    );
-    await tester.tap(find.byType(Slider));
-    await tester.pumpAndSettle();
-    expect(state.position, greaterThan(0));
-    expect(state.isPlaying, isFalse);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Home tidak overflow pada lebar 360 dan text scale 1.3', (
-    tester,
-  ) async {
     await pumpScreen(
       tester,
-      Scaffold(body: HomeScreen(onOpenPlayer: () {})),
+      harness,
+      PlaylistDetailScreen(playlistId: playlist.id, onOpenPlayer: () {}),
+    );
+
+    expect(find.text('Malam'), findsOneWidget);
+    await tester.tap(find.text('Putar semua'));
+    await tester.pumpAndSettle();
+
+    expect(harness.state.queueIds, hasLength(2));
+    expect(harness.state.isPlaying, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home dan Now Playing tidak overflow pada 360 dan skala 1.3', (
+    tester,
+  ) async {
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Midnight in Jakarta', artist: 'Nara'),
+        audioDraft('b.mp3', title: 'Blue Hours', artist: 'Nara'),
+        audioDraft('c.mp3', title: 'Slow Orbit', artist: 'Aster'),
+      ],
+    );
+    await pumpScreen(
+      tester,
+      harness,
+      const HomeScreen(onOpenPlayer: _noop),
       size: const Size(360, 780),
       textScale: 1.3,
     );
     final scrollable = find.byType(Scrollable).first;
-    expect(find.text('Baru diputar'), findsOneWidget);
     for (var step = 0; step < 6; step++) {
       await tester.drag(scrollable, const Offset(0, -250));
       await tester.pumpAndSettle();
@@ -341,38 +186,57 @@ void main() {
     }
   });
 
-  testWidgets('Reduce Motion membuat transisi route instan', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: sonoraTheme(reduceMotion: true),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const Scaffold(body: Text('Tujuan')),
-                  ),
-                ),
-                child: const Text('Buka'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Buka'));
-    await tester.pump();
-    final route = ModalRoute.of(tester.element(find.text('Tujuan')))!;
-    expect(route.animation!.isCompleted, isTrue);
-  });
-
-  testWidgets('aplikasi meneruskan Reduce Motion ke transisi tema', (
+  testWidgets('Now Playing tidak overflow pada lebar 360 dan skala 1.3', (
     tester,
   ) async {
-    await tester.pumpWidget(const SonoraApp());
-    final state = PreviewScope.of(tester.element(find.byType(AppShell)));
-    state.setReduceMotion(true);
+    final harness = await createHarness(
+      seeds: [audioDraft('a.mp3', title: 'Midnight in Jakarta')],
+    );
+    await harness.state.playItem(harness.state.songs.single);
+    await pumpScreen(
+      tester,
+      harness,
+      const PlayerScreen(),
+      size: const Size(360, 800),
+      textScale: 1.3,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Playlist'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Playlist'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('kelima tujuan navigasi dapat dibuka', (tester) async {
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Alpha'),
+        videoDraft('b.mp4', title: 'Klip'),
+      ],
+    );
+    await pumpApp(tester, harness, size: const Size(360, 800));
+
+    for (final (label, expected) in [
+      ('Library', 'Pustaka musik'),
+      ('Playlist', 'Suasana yang berbeda, satu koleksi.'),
+      ('Video', 'Ruang video'),
+      ('Settings', 'Pengaturan'),
+      ('Home', 'SONORA'),
+    ]) {
+      await tester.tap(find.byKey(ValueKey('nav-$label')));
+      await tester.pumpAndSettle();
+      expect(find.text(expected), findsWidgets, reason: label);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Reduce Motion diteruskan ke transisi tema', (tester) async {
+    final harness = await createHarness();
+    await pumpApp(tester, harness);
+    await harness.state.setReduceMotion(true);
     await tester.pumpAndSettle();
     final theme = Theme.of(tester.element(find.byType(AppShell)));
     expect(
@@ -383,4 +247,23 @@ void main() {
       Duration.zero,
     );
   });
+
+  testWidgets('pencarian Home menyaring library', (tester) async {
+    final harness = await createHarness(
+      seeds: [
+        audioDraft('a.mp3', title: 'Midnight in Jakarta'),
+        audioDraft('b.mp3', title: 'Blue Hours'),
+      ],
+    );
+    await pumpScreen(tester, harness, const HomeScreen(onOpenPlayer: _noop));
+
+    await tester.enterText(find.byType(TextField), 'blue');
+    await tester.pumpAndSettle();
+    expect(find.text('Hasil pencarian'), findsOneWidget);
+    expect(find.text('Blue Hours'), findsOneWidget);
+    expect(find.text('Midnight in Jakarta'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+void _noop() {}

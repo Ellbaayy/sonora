@@ -1,5 +1,7 @@
 package id.sonora.sonora
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+// AudioServiceActivity diperlukan agar pemutaran berlanjut saat aplikasi berada
+// di background dan notifikasi media tetap aktif.
+class MainActivity : AudioServiceActivity()

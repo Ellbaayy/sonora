@@ -1,8 +1,9 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'preview_state.dart';
+import 'media/media_item.dart';
 import 'theme.dart';
 
 class BrandMark extends StatelessWidget {
@@ -93,19 +94,45 @@ class MediaArtwork extends StatelessWidget {
     this.dimension = 64,
     this.radius = 16,
     this.hero = false,
+    this.artworkPath,
   });
+
+  /// Artwork untuk sebuah [MediaItem]: memakai cover dari berkas bila tersedia,
+  /// dan artwork prosedural sebagai fallback.
+  MediaArtwork.forItem(
+    MediaItem item, {
+    super.key,
+    this.dimension = 64,
+    this.radius = 16,
+    this.hero = false,
+  }) : style = item.style,
+       artworkPath = item.artworkPath;
+
   final ArtworkStyle style;
   final double dimension;
   final double radius;
   final bool hero;
+
+  /// Path cover hasil ekstraksi metadata, bila ada.
+  final String? artworkPath;
+
   @override
   Widget build(BuildContext context) {
+    final fallback = CustomPaint(painter: _ArtworkPainter(style, hero));
+    final path = artworkPath;
     return ExcludeSemantics(
       child: SizedBox.square(
         dimension: dimension,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(radius),
-          child: CustomPaint(painter: _ArtworkPainter(style, hero)),
+          child: path == null || path.isEmpty
+              ? fallback
+              : Image.file(
+                  File(path),
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => fallback,
+                ),
         ),
       ),
     );

@@ -1,8 +1,12 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
-import '../../main.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+
+import '../app_state.dart';
 import '../artwork.dart';
-import '../preview_state.dart';
+import '../media/media_item.dart';
 import '../theme.dart';
 import '../widgets/shared.dart';
 import 'library_screen.dart';
@@ -12,16 +16,22 @@ class VideosScreen extends StatelessWidget {
   final VoidCallback onOpenPlayer;
   @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
-    if (!state.previewMode) {
+    final state = SonoraScope.of(context);
+    if (state.videos.isEmpty) {
       return Column(
         children: [
-          const ScreenHeader(title: 'Video'),
+          ScreenHeader(
+            title: 'Video',
+            action: IconButton(
+              tooltip: 'Impor video',
+              onPressed: () => runMediaImport(context, MediaKind.video),
+              icon: const Icon(Icons.add_rounded),
+            ),
+          ),
           Expanded(
             child: EmptyLibrary(
               kind: MediaKind.video,
-              onImport: () => showImportPreview(context, kind: MediaKind.video),
-              onPreview: state.showPreview,
+              onImport: () => runMediaImport(context, MediaKind.video),
             ),
           ),
         ],
@@ -35,15 +45,10 @@ class VideosScreen extends StatelessWidget {
           subtitle: 'Koleksi visualmu, tetap offline.',
           action: IconButton(
             tooltip: 'Impor video',
-            onPressed: () => showImportPreview(context, kind: MediaKind.video),
+            onPressed: () => runMediaImport(context, MediaKind.video),
             icon: const Icon(Icons.add_rounded),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          child: PreviewNotice(compact: true),
-        ),
-        const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: GridView.builder(
@@ -59,10 +64,7 @@ class VideosScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final video = state.videos[index];
               return InkWell(
-                onTap: () {
-                  state.select(video);
-                  onOpenPlayer();
-                },
+                onTap: () => openVideoPlayer(context, video),
                 borderRadius: BorderRadius.circular(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,8 +73,8 @@ class VideosScreen extends StatelessWidget {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          MediaArtwork(
-                            style: video.style,
+                          MediaArtwork.forItem(
+                            video,
                             dimension: 300,
                             radius: 16,
                           ),
@@ -126,8 +128,16 @@ class VideosScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Preview video',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      video.available
+                          ? 'Video lokal'
+                          : 'Berkas tidak ditemukan',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: video.available
+                            ? SonoraColors.muted
+                            : SonoraColors.warning,
+                      ),
                     ),
                   ],
                 ),
@@ -139,9 +149,9 @@ class VideosScreen extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: OutlinedButton.icon(
-            onPressed: () => showImportPreview(context, kind: MediaKind.video),
+            onPressed: () => runMediaImport(context, MediaKind.video),
             icon: const Icon(Icons.folder_open_outlined),
-            label: const Text('Impor MP4 dari perangkat'),
+            label: const Text('Impor video dari perangkat'),
           ),
         ),
       ],
@@ -149,182 +159,287 @@ class VideosScreen extends StatelessWidget {
   }
 }
 
-Future<void> openVideoPreview(BuildContext context, MediaItem video) async {
-  final state = PreviewScope.of(context);
+/// Membuka pemutar video. Musik dijeda lebih dulu agar hanya satu sumber audio
+/// yang aktif (PRD bagian 8.8).
+Future<void> openVideoPlayer(BuildContext context, MediaItem video) async {
+  final state = SonoraScope.of(context);
+  if (!video.available) {
+    showAppMessage(
+      context,
+      'Berkas video tidak ditemukan. Impor ulang atau hapus dari library.',
+    );
+    return;
+  }
+  await state.pausePlayback();
+  if (!context.mounted) return;
   await Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => PreviewScope(
+      builder: (_) => SonoraScope(
         state: state,
-        child: VideoPreviewScreen(video: video),
+        child: VideoPlayerScreen(video: video),
       ),
     ),
   );
 }
 
-class VideoPreviewScreen extends StatelessWidget {
-  const VideoPreviewScreen({super.key, required this.video});
+class VideoPlayerScreen extends StatefulWidget {
+  const VideoPlayerScreen({super.key, required this.video});
   final MediaItem video;
   @override
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+  VideoPlayerController? controller;
+  bool initializing = true;
+  String? error;
+  bool fullscreen = false;
+  double volume = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    final file = File(widget.video.uri);
+    if (!await file.exists()) {
+      setState(() {
+        initializing = false;
+        error = 'Berkas video tidak ditemukan di penyimpanan aplikasi.';
+      });
+      return;
+    }
+    final created = VideoPlayerController.file(file);
+    controller = created;
+    try {
+      await created.initialize();
+      await created.setVolume(volume);
+      await created.play();
+      if (!mounted) return;
+      setState(() => initializing = false);
+      created.addListener(_onTick);
+    } catch (onError) {
+      if (!mounted) return;
+      setState(() {
+        initializing = false;
+        error =
+            'Video tidak dapat diputar. Format berkas mungkin tidak didukung.';
+      });
+    }
+  }
+
+  void _onTick() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    controller?.removeListener(_onTick);
+    controller?.dispose();
+    if (fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
+    super.dispose();
+  }
+
+  Future<void> _toggleFullscreen() async {
+    setState(() => fullscreen = !fullscreen);
+    if (fullscreen) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final state = PreviewScope.of(context);
+    final player = controller;
+    final ready = player != null && player.value.isInitialized;
+    final position = ready ? player.value.position : Duration.zero;
+    final total = ready ? player.value.duration : Duration.zero;
     return Scaffold(
       backgroundColor: SonoraColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                tooltip: 'Kembali ke library video',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            if (!fullscreen)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  tooltip: 'Kembali ke library video',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                ),
               ),
-            ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            MediaArtwork(
-                              style: video.style,
-                              dimension: 640,
-                              radius: 0,
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: ready && player.value.aspectRatio > 0
+                      ? player.value.aspectRatio
+                      : 16 / 9,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(fullscreen ? 0 : 16),
+                    child: Container(
+                      color: Colors.black,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (ready)
+                            VideoPlayer(player)
+                          else
+                            const ColoredBox(
+                              color: Colors.black,
+                              child: Center(child: CircularProgressIndicator()),
                             ),
-                            ColoredBox(
-                              color: SonoraColors.background.withValues(
-                                alpha: .2,
-                              ),
-                            ),
+                          if (error != null)
                             Center(
-                              child: IconButton(
-                                tooltip: 'Pratinjau kontrol video',
-                                onPressed: () => showAppMessage(
-                                  context,
-                                  'Pemutaran MP4 belum terhubung. Ini hanya preview tampilan.',
-                                ),
-                                icon: const Icon(
-                                  Icons.play_circle_fill_rounded,
-                                  size: 72,
-                                  color: SonoraColors.text,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 12,
-                              right: 12,
-                              bottom: 12,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: SonoraColors.background.withValues(
-                                    alpha: .8,
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: SonoraColors.warning,
                                   ),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.info_outline_rounded,
-                                      size: 16,
-                                      color: SonoraColors.warning,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        'Preview tampilan • video belum diputar',
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          if (ready)
+                            Align(
+                              alignment: Alignment.center,
+                              child: IconButton(
+                                tooltip: player.value.isPlaying
+                                    ? 'Jeda video'
+                                    : 'Putar video',
+                                onPressed: () {
+                                  player.value.isPlaying
+                                      ? player.pause()
+                                      : player.play();
+                                  setState(() {});
+                                },
+                                icon: Icon(
+                                  player.value.isPlaying
+                                      ? Icons.pause_circle_filled_rounded
+                                      : Icons.play_circle_fill_rounded,
+                                  size: 72,
+                                  color: SonoraColors.text.withValues(
+                                    alpha: .92,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        video.title,
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '${formatDuration(video.duration)} • Video contoh',
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: SonoraColors.muted),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Slider(
-                      value: state.position.clamp(0, video.duration.toDouble()),
-                      max: video.duration.toDouble(),
-                      onChanged: state.seek,
-                    ),
-                    Row(
-                      children: [
-                        Text(formatDuration(state.position)),
-                        const Spacer(),
-                        Text(formatDuration(video.duration)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton(
-                          tooltip: 'Jeda preview video',
-                          onPressed: () => showAppMessage(
-                            context,
-                            'Video engine belum tersedia pada tahap frontend.',
-                          ),
-                          icon: const Icon(
-                            Icons.pause_circle_outline_rounded,
-                            size: 36,
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        IconButton(
-                          tooltip: 'Volume preview video',
-                          onPressed: () => showAppMessage(
-                            context,
-                            'Kontrol volume tersedia sebagai slider pada layar musik. Video engine belum tersedia.',
-                          ),
-                          icon: const Icon(Icons.volume_up_outlined, size: 28),
-                        ),
-                        const SizedBox(width: 20),
-                        IconButton(
-                          tooltip: 'Layar penuh belum tersedia',
-                          onPressed: () => showAppMessage(
-                            context,
-                            'Fullscreen akan diaktifkan bersama video player asli.',
-                          ),
-                          icon: const Icon(Icons.fullscreen_rounded, size: 32),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    const PreviewNotice(),
-                  ],
+                  ),
                 ),
               ),
             ),
+            if (!fullscreen)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      widget.video.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      formatDuration(total.inSeconds),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    if (ready) ...[
+                      Slider(
+                        value: position.inMilliseconds
+                            .clamp(0, total.inMilliseconds)
+                            .toDouble(),
+                        max: total.inMilliseconds <= 0
+                            ? 1
+                            : total.inMilliseconds.toDouble(),
+                        onChanged: total.inMilliseconds <= 0
+                            ? null
+                            : (value) => player.seekTo(
+                                Duration(milliseconds: value.round()),
+                              ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            formatDuration(position.inSeconds),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const Spacer(),
+                          Text(
+                            formatDuration(total.inSeconds),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ],
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Volume video',
+                          onPressed: () {
+                            setState(() => volume = volume == 0 ? 1 : 0);
+                            player?.setVolume(volume);
+                          },
+                          icon: Icon(
+                            volume == 0
+                                ? Icons.volume_off_outlined
+                                : Icons.volume_up_outlined,
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: volume,
+                            onChanged: (value) {
+                              setState(() => volume = value);
+                              player?.setVolume(value);
+                            },
+                            semanticFormatterCallback: (value) =>
+                                'Volume video ${(value * 100).round()} persen',
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: fullscreen
+                              ? 'Keluar layar penuh'
+                              : 'Layar penuh',
+                          onPressed: _toggleFullscreen,
+                          icon: Icon(
+                            fullscreen
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            if (initializing)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('Menyiapkan video…'),
+              ),
           ],
         ),
       ),

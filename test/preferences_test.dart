@@ -1,85 +1,77 @@
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sonora/src/data/database.dart';
+import 'package:sonora/src/app_state.dart';
 import 'package:sonora/src/data/repositories.dart';
-import 'package:sonora/src/preview_state.dart';
+import 'package:sonora/src/media/media_item.dart';
+import 'package:sonora/src/playback/audio_engine.dart';
 
-/// Menunggu penulisan preferensi yang dijalankan tanpa ditunggu oleh state.
-Future<void> waitForSetting(
-  SettingsRepository settings,
-  String key,
-  String expected,
-) async {
-  for (var attempt = 0; attempt < 50; attempt++) {
-    if (await settings.read(key) == expected) return;
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-  }
-  fail('Pengaturan $key tidak tersimpan sebagai $expected.');
-}
+import 'helpers.dart';
 
 void main() {
-  late SonoraDatabase db;
-  late SettingsRepository settings;
-
-  setUp(() {
-    db = SonoraDatabase(NativeDatabase.memory());
-    settings = SettingsRepository(db);
-  });
-
-  tearDown(() async {
-    await db.close();
-  });
-
   test('preferensi UI dan playback dipulihkan pada state baru', () async {
-    final first = PreviewState(settings: settings);
-    first.setAccent(true);
-    first.setReduceMotion(true);
-    first.toggleShuffle();
-    first.cycleRepeat();
+    final harness = await createHarness(
+      seeds: [audioDraft('a.mp3', title: 'Alpha')],
+    );
+    addTearDown(harness.close);
+    final songId = harness.state.songs.single.id;
 
-    await waitForSetting(settings, SettingsKeys.cyanAccent, 'true');
-    await waitForSetting(settings, SettingsKeys.reduceMotion, 'true');
-    await waitForSetting(settings, SettingsKeys.shuffle, 'true');
-    await waitForSetting(settings, SettingsKeys.repeatMode, 'one');
-    first.dispose();
+    await harness.state.setAccent(true);
+    await harness.state.setReduceMotion(true);
+    await harness.state.toggleShuffle();
+    await harness.state.cycleRepeat();
+    await harness.state.setVolume(.35);
+    await harness.state.toggleFavorite(songId);
 
-    final restored = PreviewState(settings: settings);
+    await waitForSetting(harness.backend, SettingsKeys.cyanAccent, 'true');
+    await waitForSetting(harness.backend, SettingsKeys.reduceMotion, 'true');
+    await waitForSetting(harness.backend, SettingsKeys.shuffle, 'true');
+    await waitForSetting(harness.backend, SettingsKeys.repeatMode, 'one');
+    await waitForSetting(harness.backend, SettingsKeys.volume, '0.35');
+    await waitForSetting(harness.backend, SettingsKeys.favorites, songId);
+
+    final restored = SonoraState(
+      FakeAudioEngine(),
+      backend: harness.backend,
+      library: harness.state.library,
+    );
+    addTearDown(restored.dispose);
     expect(
       restored.cyanAccent,
       isFalse,
       reason: 'belum dibaca sebelum restore',
     );
-    await restored.restorePreferences();
+    await restored.init();
 
     expect(restored.cyanAccent, isTrue);
     expect(restored.reduceMotion, isTrue);
     expect(restored.shuffle, isTrue);
-    expect(restored.repeat, PreviewRepeat.one);
-    restored.dispose();
+    expect(restored.repeat, SonoraRepeat.one);
+    expect(restored.volume, closeTo(.35, .001));
+    expect(restored.favorites, contains(songId));
   });
 
   test('tanpa data tersimpan, preferensi memakai nilai bawaan', () async {
-    final state = PreviewState(settings: settings);
-    await state.restorePreferences();
+    final harness = await createHarness();
+    addTearDown(harness.close);
 
-    expect(state.cyanAccent, isFalse);
-    expect(state.reduceMotion, isFalse);
-    expect(state.shuffle, isFalse);
-    expect(state.repeat, PreviewRepeat.off);
-    state.dispose();
+    expect(harness.state.cyanAccent, isFalse);
+    expect(harness.state.reduceMotion, isFalse);
+    expect(harness.state.shuffle, isFalse);
+    expect(harness.state.repeat, SonoraRepeat.off);
+    expect(harness.state.volume, closeTo(.72, .001));
+    expect(harness.state.favorites, isEmpty);
   });
 
-  test('state tanpa repository tetap berjalan tanpa penulisan', () async {
-    final state = PreviewState();
-    state.setAccent(true);
-    state.setReduceMotion(true);
-    state.toggleShuffle();
-    state.cycleRepeat();
+  test(
+    'impor tanpa layanan media memberi pesan, bukan kegagalan diam',
+    () async {
+      final harness = await createHarness(withLibrary: false);
+      addTearDown(harness.close);
 
-    expect(state.cyanAccent, isTrue);
-    expect(state.repeat, PreviewRepeat.one);
-    await state.restorePreferences();
-    expect(await settings.read(SettingsKeys.cyanAccent), isNull);
-    state.dispose();
-  });
+      final report = await harness.state.importMedia(MediaKind.audio);
+
+      expect(report, isNull);
+      expect(harness.state.notice, contains('tidak tersedia'));
+      expect(harness.state.importing, isFalse);
+    },
+  );
 }
