@@ -152,3 +152,11 @@ Seluruh data berada di perangkat. Tidak ada unggahan media, akun, atau telemetri
 Artwork diambil dari cover di dalam berkas bila tersedia; bila tidak, aplikasi menggambar
 artwork sendiri. Font Manrope dibundel dengan lisensi SIL Open Font License
 (`assets/fonts/OFL.txt`). Kode proyek memakai lisensi MIT (`LICENSE`).
+
+## Bahasa implementasi
+
+Aplikasi tetap ditulis dengan Flutter. Usulan menulis ulang SONORA sepenuhnya dalam Rust sudah
+dikaji pada 23 November 2026 dan ditolak: MediaSession, foreground service, pemilih SAF, dan
+permukaan video tetap membutuhkan Kotlin, sehingga "full Rust" tidak tercapai. Bukti dan jalur
+alternatifnya ada di [`docs/rust-feasibility.md`](docs/rust-feasibility.md) dan
+[`docs/adr-0001-rust.md`](docs/adr-0001-rust.md).
