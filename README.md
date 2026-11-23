@@ -25,6 +25,7 @@
 
 <p align="center">
   <a href="#status-100--mvp-lengkap">Fitur</a> ·
+  <a href="#tangkapan-layar">Tangkapan layar</a> ·
   <a href="#teknologi">Teknologi</a> ·
   <a href="#arsitektur">Arsitektur</a> ·
   <a href="#pengujian">Pengujian</a> ·
@@ -32,6 +33,20 @@
 </p>
 
 SONORA adalah pemutar musik dan video **lokal** untuk Android dengan tema **Premium Dark Aurora**. Proyek ini menggunakan Flutter dan Dart, berjalan sepenuhnya offline, dan tidak memiliki akun, server, maupun telemetri.
+
+## Tangkapan layar
+
+Ketujuh layar diambil dari emulator Android 16 (1080 × 2400) pada 23 November 2026, memakai
+aplikasi versi 1.0.0 dengan empat lagu dan tiga video hasil impor.
+
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/assets/screenshots/01-beranda.png" width="240" alt="Beranda"> | <img src="docs/assets/screenshots/02-pustaka.png" width="240" alt="Pustaka musik"> | <img src="docs/assets/screenshots/03-pemutar.png" width="240" alt="Now Playing"> |
+| **Beranda** — sapaan, pencarian, dan rak terbaru | **Pustaka musik** — tab lagu, artis, album | **Now Playing** — kontrol lengkap dan volume |
+| <img src="docs/assets/screenshots/04-antrean.png" width="240" alt="Antrean"> | <img src="docs/assets/screenshots/05-playlist.png" width="240" alt="Playlist"> | <img src="docs/assets/screenshots/06-video.png" width="240" alt="Ruang video"> |
+| **Antrean** — trek aktif dan urutan berikutnya | **Playlist** — koleksi tersimpan per suasana | **Ruang video** — pustaka video lokal |
+| <img src="docs/assets/screenshots/07-pengaturan.png" width="240" alt="Pengaturan"> | | |
+| **Pengaturan** — tema, aksen, Reduce Motion, isi library | | |
 
 ## Status: 1.0.0 — MVP lengkap
 
@@ -224,6 +239,7 @@ diperbarui saat ada perubahan baru, pada commit yang sama dengan perubahannya.
 
 | Tanggal | Commit | Perubahan |
 |---|---|---|
+| 23 Nov 2026 | *(commit ini)* | Tangkapan layar tujuh layar dan tabel teknologi di README |
 | 23 Nov 2026 | `a15c4b8` | Studi kelayakan Rust dan ADR yang menetapkan Flutter sebagai bahasa implementasi |
 | 30 Okt 2026 | `5bba87b` | README: jumlah pengujian dan perilaku tombol putar video |
 | 30 Okt 2026 | `c133484` | Perbaikan: tombol putar memulai ulang video yang sudah selesai |
