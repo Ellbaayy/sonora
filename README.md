@@ -1,4 +1,25 @@
+<p align="center">
+  <img src="docs/assets/sonora-banner.png" alt="SONORA" width="480">
+</p>
+
 # SONORA
+
+<p align="center">
+  <a href="#status-100--mvp-lengkap"><img alt="Status" src="https://img.shields.io/badge/status-1.0.0-00B4D8?style=flat-square"></a>
+  <a href="#teknologi"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.8-02569B?style=flat-square&logo=flutter&logoColor=white"></a>
+  <a href="#teknologi"><img alt="Dart" src="https://img.shields.io/badge/Dart-3.13-0175C2?style=flat-square&logo=dart&logoColor=white"></a>
+  <a href="#teknologi"><img alt="Android" src="https://img.shields.io/badge/Android-minSdk%2024-3DDC84?style=flat-square&logo=android&logoColor=white"></a>
+  <a href="#pengujian"><img alt="Tes" src="https://img.shields.io/badge/tes-46%20lulus-2ea44f?style=flat-square"></a>
+  <a href="LICENSE"><img alt="Lisensi" src="https://img.shields.io/badge/lisensi-MIT-F5C518?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="#status-100--mvp-lengkap">Fitur</a> ·
+  <a href="#teknologi">Teknologi</a> ·
+  <a href="#arsitektur">Arsitektur</a> ·
+  <a href="#pengujian">Pengujian</a> ·
+  <a href="#log-perubahan">Log perubahan</a>
+</p>
 
 SONORA adalah pemutar musik dan video **lokal** untuk Android dengan tema **Premium Dark Aurora**. Proyek ini menggunakan Flutter dan Dart, berjalan sepenuhnya offline, dan tidak memiliki akun, server, maupun telemetri.
 
@@ -99,6 +120,30 @@ migrasi. Regenerasi kode Drift setelah mengubah skema:
 dart run build_runner build
 ```
 
+## Teknologi
+
+Versi diambil dari `pubspec.yaml`, `android/settings.gradle.kts`, dan `flutter --version`
+pada 23 November 2026.
+
+| Lapisan | Teknologi | Versi | Dipakai untuk |
+|---|---|---|---|
+| Bahasa & UI | Flutter / Dart | 3.47.8 / SDK ^3.13.7 | seluruh antarmuka dan logika aplikasi |
+| Pemutaran audio | `just_audio` | 0.10.6 | MP3, M4A, AAC, WAV, FLAC, OGG, OPUS |
+| Latar belakang | `audio_service` | 0.18.19 | foreground service, `MediaSession`, notifikasi media, tombol headset |
+| Fokus audio | `audio_session` | 0.2.4 | mengalah pada panggilan/audio lain |
+| Pemutaran video | `video_player` | 2.14.1 | MP4, M4V, MKV, WEBM, 3GP (ExoPlayer) |
+| Basis data | `drift` + `drift_flutter` | 2.35.3 / 0.3.1 | SQLite bertipe dengan migrasi skema |
+| Metadata | `audio_metadata_reader` | 1.8.1 | tag ID3/Vorbis/MP4 dan cover |
+| Pemilih berkas | `file_picker` | 13.3.0 | Storage Access Framework |
+| Izin runtime | `permission_handler` | 12.0.0 | `POST_NOTIFICATIONS` saat pemutaran pertama |
+| Direktori aplikasi | `path_provider` | 2.1.6 | `<app support>/media` dan lokasi basis data |
+| Identitas | `uuid` | 4.6.0 | ID media, playlist, dan antrean |
+| Android | AGP / Kotlin / JVM | 9.1.0 / 2.4.0 / 17 | `minSdk` 24, `targetSdk` 36, `applicationId` `id.sonora.sonora` |
+| Tipografi | Manrope | dibundel | lisensi SIL OFL, `assets/fonts/OFL.txt` |
+
+Tidak ada dependensi jaringan: seluruh paket dipakai di perangkat, tanpa SDK iklan, analitik,
+atau layanan awan.
+
 ## Menjalankan pemeriksaan
 
 ```bash
@@ -160,3 +205,21 @@ dikaji pada 23 November 2026 dan ditolak: MediaSession, foreground service, pemi
 permukaan video tetap membutuhkan Kotlin, sehingga "full Rust" tidak tercapai. Bukti dan jalur
 alternatifnya ada di [`docs/rust-feasibility.md`](docs/rust-feasibility.md) dan
 [`docs/adr-0001-rust.md`](docs/adr-0001-rust.md).
+
+## Log perubahan
+
+Riwayat proyek, terbaru di atas. Daftar ini disusun dari `git log` pada 23 November 2026 dan
+diperbarui saat ada perubahan baru, pada commit yang sama dengan perubahannya.
+
+| Tanggal | Commit | Perubahan |
+|---|---|---|
+| 23 Nov 2026 | `a15c4b8` | Studi kelayakan Rust dan ADR yang menetapkan Flutter sebagai bahasa implementasi |
+| 30 Okt 2026 | `5bba87b` | README: jumlah pengujian dan perilaku tombol putar video |
+| 30 Okt 2026 | `c133484` | Perbaikan: tombol putar memulai ulang video yang sudah selesai |
+| 30 Okt 2026 | `6f7db5d` | **MVP 1.0.0** — impor media, pemutaran audio/video, persistensi penuh |
+| 27 Okt 2026 | `828f819` | Lapisan data lokal SQLite dan persistensi preferensi |
+| 27 Okt 2026 | `f607950` | Frontend pratinjau SONORA dengan data contoh berlabel |
+| 25 Okt 2026 | `6e6d135` | Inisialisasi repositori proyek Flutter |
+
+Perubahan berikutnya ditambahkan ke tabel ini pada commit yang sama dengan perubahannya, supaya
+log tidak tertinggal dari kode.
