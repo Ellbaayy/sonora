@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/assets/sonora-banner.png" alt="SONORA" width="480">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sonora-logo.png">
+    <img src="docs/assets/sonora-logo-light.png" alt="SONORA" width="360">
+  </picture>
 </p>
 
 # SONORA
