@@ -5,16 +5,23 @@
   </picture>
 </p>
 
-# SONORA
+<p align="center">
+  <a href="#teknologi"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.8-02569B?style=flat-square&logo=flutter&logoColor=white"></a>
+  <a href="#teknologi"><img alt="Dart" src="https://img.shields.io/badge/Dart-3.13-0175C2?style=flat-square&logo=dart&logoColor=white"></a>
+  <a href="#teknologi"><img alt="Android Studio" src="https://img.shields.io/badge/Android%20Studio-2026.2-3DDC84?style=flat-square&logo=androidstudio&logoColor=white"></a>
+  <a href="#teknologi"><img alt="SQLite" src="https://img.shields.io/badge/SQLite-drift%202.35-003B57?style=flat-square&logo=sqlite&logoColor=white"></a>
+  <a href="#teknologi"><img alt="AGP" src="https://img.shields.io/badge/AGP-9.1.0-3DDC84?style=flat-square&logo=gradle&logoColor=white"></a>
+  <a href="#teknologi"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.4.0-7F52FF?style=flat-square&logo=kotlin&logoColor=white"></a>
+</p>
 
 <p align="center">
   <a href="#status-100--mvp-lengkap"><img alt="Status" src="https://img.shields.io/badge/status-1.0.0-00B4D8?style=flat-square"></a>
-  <a href="#teknologi"><img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47.8-02569B?style=flat-square&logo=flutter&logoColor=white"></a>
-  <a href="#teknologi"><img alt="Dart" src="https://img.shields.io/badge/Dart-3.13-0175C2?style=flat-square&logo=dart&logoColor=white"></a>
   <a href="#teknologi"><img alt="Android" src="https://img.shields.io/badge/Android-minSdk%2024-3DDC84?style=flat-square&logo=android&logoColor=white"></a>
   <a href="#pengujian"><img alt="Tes" src="https://img.shields.io/badge/tes-46%20lulus-2ea44f?style=flat-square"></a>
   <a href="LICENSE"><img alt="Lisensi" src="https://img.shields.io/badge/lisensi-MIT-F5C518?style=flat-square"></a>
 </p>
+
+# SONORA
 
 <p align="center">
   <a href="#status-100--mvp-lengkap">Fitur</a> ·
@@ -142,6 +149,7 @@ pada 23 November 2026.
 | Direktori aplikasi | `path_provider` | 2.1.6 | `<app support>/media` dan lokasi basis data |
 | Identitas | `uuid` | 4.6.0 | ID media, playlist, dan antrean |
 | Android | AGP / Kotlin / JVM | 9.1.0 / 2.4.0 / 17 | `minSdk` 24, `targetSdk` 36, `applicationId` `id.sonora.sonora` |
+| IDE | Android Studio | 2026.2 (AI-262) | menjalankan emulator dan profiler |
 | Tipografi | Manrope | dibundel | lisensi SIL OFL, `assets/fonts/OFL.txt` |
 
 Tidak ada dependensi jaringan: seluruh paket dipakai di perangkat, tanpa SDK iklan, analitik,
