@@ -103,7 +103,14 @@ Batas yang masih berlaku (jujur, bukan bug):
   tidak diperiksa.
 - **Hapus dari library** menghapus baris database, salinan aplikasi, dan cover hasil
   ekstraksi. Berkas asli di perangkat tetap utuh.
-- **Duplikat** dikenali dari URI yang sama, atau kombinasi nama berkas dan ukuran yang sama.
+- **Duplikat** dikenali dari isi berkas (SHA-256), bukan dari namanya. Berkas yang sama
+  dengan nama berbeda — misalnya `lagu.mp3` lalu `lagu (1).mp3` — tetap ditolak, sedangkan
+  dua berkas berbeda yang kebetulan bernama dan berukuran sama tetap diterima. Pembandingan
+  hanya dilakukan terhadap baris yang ukurannya sama, dan berkas yang sudah hilang
+  dibandingkan lewat nama sebagai cadangan agar impor ulang tetap mungkin.
+- **Impor ganda tidak mungkin terjadi.** Baris library dan salinan berkas baru dibuat setelah
+  pemeriksaan duplikat, dan salinan untuk berkas yang ditolak langsung dihapus, sehingga tidak
+  ada salinan yatim yang menumpuk.
 - **Shuffle** memakai urutan deterministik yang stabil: item yang sudah ada mempertahankan
   posisinya, item baru masuk di belakang, dan tidak ada item yang hilang.
 - **Pemulihan posisi** tidak memutar otomatis. Aplikasi membuka trek terakhir dalam keadaan
@@ -211,11 +218,14 @@ dan `POST_NOTIFICATIONS` untuk pemutaran background, serta service
 
 ## Pengujian
 
-`flutter test` menjalankan 54 pengujian:
+`flutter test` menjalankan 58 pengujian:
 
 - `test/data_repository_test.dart` — constraint, duplikat, transaksi, dan urutan posisi.
 - `test/app_state_test.dart` — antrean/repeat/shuffle, riwayat, impor, hapus media,
   persistensi antrean + playlist + posisi, dan pencarian.
+- `test/duplicate_test.dart` — duplikat berbasis isi: berkas sama dengan nama berbeda
+  ditolak, berkas berbeda dengan ukuran atau nama sama tetap diterima, dan berkas lama yang
+  sudah hilang tidak menggagalkan impor.
 - `test/media_storage_test.dart` — verifikasi ukuran salinan saat impor (nol byte dan
   terpotong ditolak, sisa berkas dibersihkan), satu berkas gagal tidak membatalkan berkas
   lain, dan pemeriksaan ketersediaan salinan saat startup.
@@ -252,7 +262,8 @@ diperbarui saat ada perubahan baru, pada commit yang sama dengan perubahannya.
 
 | Tanggal | Commit | Perubahan |
 |---|---|---|
-| 23 Nov 2026 | *(commit ini)* | Perbaikan: salinan impor diverifikasi, ketersediaan media diperiksa saat aplikasi dibuka |
+| 23 Nov 2026 | *(commit ini)* | Duplikat dikenali dari isi berkas (SHA-256), bukan nama |
+| 23 Nov 2026 | `e3ed9bd` | Perbaikan: salinan impor diverifikasi, ketersediaan media diperiksa saat aplikasi dibuka |
 | 23 Nov 2026 | `983890a` | Tangkapan layar tujuh layar dan tabel teknologi di README |
 | 23 Nov 2026 | `a15c4b8` | Studi kelayakan Rust dan ADR yang menetapkan Flutter sebagai bahasa implementasi |
 | 30 Okt 2026 | `5bba87b` | README: jumlah pengujian dan perilaku tombol putar video |

@@ -1,3 +1,7 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -171,14 +175,61 @@ class MediaRepository {
       _db.mediaItems,
     )..where((t) => t.uri.equals(draft.uri.trim()))).getSingleOrNull();
     if (byUri != null) return byUri;
+
     final size = draft.fileSizeBytes;
     if (size == null) return null;
-    return (_db.select(_db.mediaItems)..where(
-          (t) =>
-              t.fileName.equals(draft.fileName.trim()) &
-              t.fileSizeBytes.equals(size),
-        ))
-        .getSingleOrNull();
+
+    // Nama berkas saja tidak cukup: berkas yang sama sering diimpor ulang
+    // dengan nama berbeda ("lagu.mp3" lalu "lagu (1).mp3"), dan dua berkas
+    // berbeda bisa kebetulan bernama dan berukuran sama. Karena itu isi
+    // berkas dibandingkan lewat SHA-256, tetapi hanya terhadap baris yang
+    // ukurannya sama supaya pembacaan tetap sedikit.
+    final kandidat = await (_db.select(
+      _db.mediaItems,
+    )..where((t) => t.fileSizeBytes.equals(size))).get();
+
+    final hashBaru = _hashFile(draft.uri);
+    for (final row in kandidat) {
+      final hashLama = _hashFile(row.uri);
+      if (hashBaru != null && hashLama != null) {
+        if (hashBaru == hashLama) return row;
+        continue;
+      }
+      // Salah satu berkas tidak dapat dibaca (misalnya salinan sudah hilang).
+      // Dalam keadaan itu nama berkas dipakai sebagai cadangan, agar impor
+      // ulang berkas yang hilang tetap mungkin ketika namanya berbeda.
+      if (row.fileName.trim() == draft.fileName.trim()) return row;
+    }
+    return null;
+  }
+
+  /// SHA-256 isi berkas, atau null bila berkas tidak dapat dibaca.
+  ///
+  /// Dibaca bertahap 64 KB supaya berkas video besar tidak dimuat sekaligus,
+  /// dan sengaja sinkron: impor juga dijalankan di zona FakeAsync pada widget
+  /// test, tempat IO asinkron menggantung.
+  String? _hashFile(String path) {
+    if (path.isEmpty) return null;
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    RandomAccessFile? handle;
+    try {
+      final sink = _DigestSink();
+      final input = sha256.startChunkedConversion(sink);
+      handle = file.openSync();
+      final buffer = Uint8List(64 * 1024);
+      while (true) {
+        final read = handle.readIntoSync(buffer);
+        if (read <= 0) break;
+        input.add(read == buffer.length ? buffer : buffer.sublist(0, read));
+      }
+      input.close();
+      return sink.value?.toString();
+    } on FileSystemException {
+      return null;
+    } finally {
+      handle?.closeSync();
+    }
   }
 
   String _titleFor(MediaDraft draft) {
@@ -624,4 +675,15 @@ abstract final class SettingsKeys {
   static const shuffle = 'playback.shuffle';
   static const volume = 'playback.volume';
   static const favorites = 'library.favorites';
+}
+
+/// Penampung satu digest dari konversi bertahap `sha256`.
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }
