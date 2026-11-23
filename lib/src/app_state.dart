@@ -197,12 +197,26 @@ class SonoraState extends ChangeNotifier {
   /// Memuat seluruh data tersimpan. Aman dipanggil sekali saat startup.
   Future<void> init() async {
     await _reloadLibrary();
+    await _verifyAvailability();
     await _reloadPlaylists();
     await _reloadQueue();
     await restorePreferences();
     await _restorePlaybackState();
     _ready = true;
     _notify();
+  }
+
+  /// Menandai media yang salinan aplikasinya sudah hilang agar statusnya
+  /// terlihat di library tanpa menunggu pengguna menekan putar.
+  Future<void> _verifyAvailability() async {
+    final service = library;
+    if (service == null) return;
+    try {
+      final changed = await service.verifyAvailability();
+      if (changed > 0) await _reloadLibrary();
+    } catch (error) {
+      debugPrint('SONORA: gagal memeriksa ketersediaan media ($error)');
+    }
   }
 
   Future<void> restorePreferences() async {

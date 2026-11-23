@@ -159,13 +159,53 @@ class MediaStorage {
           'dokumen. Coba salin berkas ke penyimpanan perangkat lebih dulu.',
         );
       }
+      // Salinan kosong atau terpotong berarti impor gagal, meski tidak ada
+      // galat dari sistem berkas: penyedia dokumen kadang mengembalikan
+      // stream kosong. Tanpa pemeriksaan ini, baris library tetap tercatat
+      // "tersedia" padahal berkasnya tidak bisa diputar.
+      final copied = target.lengthSync();
+      if (copied == 0) {
+        _discard(target);
+        throw MediaImportException(
+          'Berkas “${picked.fileName}” kosong sehingga tidak dapat '
+          'disalin. Periksa berkas aslinya lalu coba lagi.',
+        );
+      }
+      if (picked.sizeBytes > 0 && copied != picked.sizeBytes) {
+        _discard(target);
+        throw MediaImportException(
+          'Salinan “${picked.fileName}” tidak utuh '
+          '($copied dari ${picked.sizeBytes} byte). Coba impor ulang.',
+        );
+      }
     } on FileSystemException {
+      _discard(target);
       throw MediaImportException(
         'Berkas “${picked.fileName}” tidak dapat dibaca. Periksa izin akses '
         'berkas lalu coba lagi.',
       );
     }
     return target.path;
+  }
+
+  /// Menghapus berkas salinan yang gagal; kegagalan hapus tidak ditampilkan.
+  void _discard(File file) {
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } on FileSystemException {
+      // Sisa berkas akan dibersihkan saat impor berikutnya.
+    }
+  }
+
+  /// Apakah [path] berada di dalam direktori media milik aplikasi.
+  ///
+  /// Hanya salinan milik SONORA yang boleh diperiksa keberadaannya; URI dari
+  /// luar (misalnya `content://` atau path lama) dibiarkan apa adanya.
+  bool owns(String path) {
+    if (path.isEmpty) return false;
+    final root = p.normalize(p.absolute(mediaDir.path));
+    final normalized = p.normalize(p.absolute(path));
+    return p.isWithin(root, normalized);
   }
 
   Future<String?> saveArtwork(Uint8List bytes, String? mimeType) async {
@@ -233,6 +273,7 @@ class MediaLibraryService {
     final picked = await picker.pick(type);
     if (picked.isEmpty) return const ImportReport([]);
     final drafts = <MediaDraft>[];
+    final failures = <ImportOutcome>[];
     for (var index = 0; index < picked.length; index++) {
       final file = picked[index];
       onProgress?.call(
@@ -242,7 +283,20 @@ class MediaLibraryService {
           fileName: file.fileName,
         ),
       );
-      final copyPath = await storage.copyIn(file);
+      final String copyPath;
+      try {
+        copyPath = await storage.copyIn(file);
+      } on MediaImportException catch (error) {
+        // Satu berkas gagal tidak boleh membatalkan seluruh impor.
+        failures.add(
+          ImportOutcome(
+            MediaDraft(uri: '', fileName: file.fileName, mediaType: type),
+            ImportStatus.rejected,
+            reason: error.message,
+          ),
+        );
+        continue;
+      }
       final metadata = await reader.read(copyPath);
       String? artworkPath;
       final artworkBytes = metadata.artworkBytes;
@@ -277,7 +331,7 @@ class MediaLibraryService {
     onProgress?.call(
       ImportProgress(processed: picked.length, total: picked.length),
     );
-    return report;
+    return ImportReport([...report.outcomes, ...failures]);
   }
 
   /// Menghapus record media beserta salinan milik aplikasi. Berkas asli
@@ -288,5 +342,24 @@ class MediaLibraryService {
     await backend.media.removeFromLibrary(mediaId);
     await storage.deleteQuietly(row.uri);
     await storage.deleteQuietly(row.artworkPath);
+  }
+
+  /// Memeriksa keberadaan salinan media milik aplikasi dan menandai yang
+  /// berkasnya hilang sebagai tidak tersedia.
+  ///
+  /// Memakai IO sinkron dengan sengaja: dipanggil saat startup, termasuk di
+  /// zona FakeAsync pada widget test, tempat IO asinkron menggantung.
+  /// Mengembalikan jumlah baris yang berubah statusnya.
+  Future<int> verifyAvailability() async {
+    final rows = await backend.media.all();
+    var changed = 0;
+    for (final row in rows) {
+      if (row.availability != 'available') continue;
+      if (!storage.owns(row.uri)) continue;
+      if (File(row.uri).existsSync()) continue;
+      await backend.media.markUnavailable(row.id);
+      changed++;
+    }
+    return changed;
   }
 }

@@ -56,7 +56,9 @@ Yang tersedia:
 
 - **Impor media** melalui pemilih berkas sistem (Storage Access Framework) untuk audio
   (MP3, M4A, AAC, WAV, FLAC, OGG, OPUS) dan video (MP4, M4V, MKV, WEBM, 3GP), dengan
-  ringkasan hasil: berhasil, duplikat, dan tidak didukung.
+  ringkasan hasil: berhasil, duplikat, dan tidak didukung. Salinan yang kosong atau
+  terpotong ditolak sebagai berkas tidak didukung, dan satu berkas gagal tidak membatalkan
+  berkas lain dalam satu kali impor.
 - **Metadata lokal**: judul, artis, album, durasi, dan cover di dalam berkas dibaca
   langsung di perangkat. Bila tag tidak ada, nama berkas dipakai sebagai judul.
 - **Pemutaran audio** dengan play/pause, seek, volume, previous/next, shuffle, dan repeat
@@ -91,6 +93,14 @@ Batas yang masih berlaku (jujur, bukan bug):
   SONORA menyalin berkas terpilih ke penyimpanan aplikasi (`<app support>/media`). Tanpa
   salinan, media tidak dapat diputar lagi setelah pemilih ditutup atau perangkat dimulai
   ulang. Berkas **asli tidak pernah dipindahkan, diubah, atau dihapus**.
+- **Salinan diverifikasi setelah disalin.** Ukuran salinan dibandingkan dengan ukuran berkas
+  sumber; salinan nol byte atau tidak utuh dihapus dan dilaporkan sebagai berkas tidak
+  didukung. Penyedia dokumen kadang mengembalikan stream kosong tanpa galat, dan tanpa
+  pemeriksaan ini baris library tercatat "tersedia" padahal berkasnya tidak bisa diputar.
+- **Ketersediaan diperiksa saat aplikasi dibuka.** Salinan milik SONORA yang berkasnya sudah
+  hilang ditandai tidak tersedia pada startup, sehingga library menampilkan "Berkas tidak
+  ditemukan" tanpa menunggu pengguna menekan putar. URI di luar direktori media aplikasi
+  tidak diperiksa.
 - **Hapus dari library** menghapus baris database, salinan aplikasi, dan cover hasil
   ekstraksi. Berkas asli di perangkat tetap utuh.
 - **Duplikat** dikenali dari URI yang sama, atau kombinasi nama berkas dan ukuran yang sama.
@@ -201,11 +211,14 @@ dan `POST_NOTIFICATIONS` untuk pemutaran background, serta service
 
 ## Pengujian
 
-`flutter test` menjalankan 46 pengujian:
+`flutter test` menjalankan 54 pengujian:
 
 - `test/data_repository_test.dart` — constraint, duplikat, transaksi, dan urutan posisi.
 - `test/app_state_test.dart` — antrean/repeat/shuffle, riwayat, impor, hapus media,
   persistensi antrean + playlist + posisi, dan pencarian.
+- `test/media_storage_test.dart` — verifikasi ukuran salinan saat impor (nol byte dan
+  terpotong ditolak, sisa berkas dibersihkan), satu berkas gagal tidak membatalkan berkas
+  lain, dan pemeriksaan ketersediaan salinan saat startup.
 - `test/preferences_test.dart` — pemulihan preferensi dan fallback.
 - `test/screens_test.dart` — lima layar, Now Playing, antrean, playlist, dynamic island,
   pencarian, serta anti-overflow pada lebar 360 dan skala teks 1.3.
@@ -239,7 +252,8 @@ diperbarui saat ada perubahan baru, pada commit yang sama dengan perubahannya.
 
 | Tanggal | Commit | Perubahan |
 |---|---|---|
-| 23 Nov 2026 | *(commit ini)* | Tangkapan layar tujuh layar dan tabel teknologi di README |
+| 23 Nov 2026 | *(commit ini)* | Perbaikan: salinan impor diverifikasi, ketersediaan media diperiksa saat aplikasi dibuka |
+| 23 Nov 2026 | `983890a` | Tangkapan layar tujuh layar dan tabel teknologi di README |
 | 23 Nov 2026 | `a15c4b8` | Studi kelayakan Rust dan ADR yang menetapkan Flutter sebagai bahasa implementasi |
 | 30 Okt 2026 | `5bba87b` | README: jumlah pengujian dan perilaku tombol putar video |
 | 30 Okt 2026 | `c133484` | Perbaikan: tombol putar memulai ulang video yang sudah selesai |
